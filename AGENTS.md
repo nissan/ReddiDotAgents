@@ -65,6 +65,7 @@ Then verify with `omp usage accounts`. A provider the user does not subscribe to
 ### 5. Firstmate (only if the user wants it)
 
 - If `~/firstmate` does not exist, clone https://github.com/nissan/firstmate there, follow its README and CONTRIBUTING for bootstrap and `no-mistakes` setup, then rerun `scripts/sync.sh --apply` to install `config/crew-dispatch.json`.
+- The crew dispatch profile uses omp model roles with `auto` effort, which only a Firstmate home including nissan/firstmate PR #52 accepts. If the sync reports that the home predates it, update that home through its own procedure (normally `git pull` on `main`). Do not force the file in: an invalid dispatch file makes Firstmate ignore every dispatch rule.
 - Start the primary with plain `omp` inside the Firstmate home, in a herdr pane.
 - Never hand-copy files into an existing Firstmate home's `config/` beyond what the sync writes.
 

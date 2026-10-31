@@ -159,6 +159,12 @@ sync_firstmate() {
     ok "no Firstmate home at $FM_HOME; skipped (see README to set one up)"
     return 0
   fi
+  # The profile names omp roles with effort "auto"; Firstmate before nissan/firstmate#52
+  # rejects that, and an invalid dispatch file disables every rule, so never install it there.
+  if ! grep -qF '"xhigh","max","auto"' "$FM_HOME/bin/fm-bootstrap.sh" 2>/dev/null; then
+    missing "config/crew-dispatch.json: $FM_HOME predates omp auto effort (needs nissan/firstmate#52); update it, then rerun"
+    return 0
+  fi
   sync_file "$ROOT/firstmate/crew-dispatch.json" "$FM_HOME/config/crew-dispatch.json" "config/crew-dispatch.json"
 }
 

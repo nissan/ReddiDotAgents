@@ -27,6 +27,12 @@ Frontier models (Claude Fable/Mythos 5.1, GPT-6 Astra) stay out of the automatic
 
 **Firstmate crew dispatch.** [`firstmate/crew-dispatch.json`](firstmate/crew-dispatch.json) routes Firstmate crew tasks to the same omp tiers, ranked by Firstmate's own quota snapshot, with `auto` effort.
 
+**Firstmate harness changes.** The [nissan/firstmate](https://github.com/nissan/firstmate) fork carries the harness support this kit relies on:
+- [#52](https://github.com/nissan/firstmate/pull/52): an omp primary's built-in delegation (the `task` tool and eval `agent()`/`workpool()`) is refused in favour of fleet dispatch. Firstmate accepts omp model roles and `auto` effort for omp crew, keeps `auto` through relaunch, and refuses it for other harnesses.
+- [#53](https://github.com/nissan/firstmate/pull/53): reconciles newer upstream Firstmate.
+
+The crew dispatch profile needs a Firstmate home that includes #52. `scripts/sync.sh` refuses to install it into an older checkout or into upstream Firstmate, because their validators reject `auto` effort.
+
 **Tooling.** The script installs the herdr integrations for omp and Pi, so their sessions appear in herdr's sidebar and resume after a restart. It also installs the npm CLI tools Firstmate expects (the `*-axi` tools and the Railway CLI).
 
 ## Components
@@ -71,7 +77,7 @@ Start your agent (`omp`, `claude`, `codex`, …) in that directory and ask it to
    omp login google-antigravity
    omp usage accounts        # confirm
    ```
-4. Optional, for Firstmate: clone [nissan/firstmate](https://github.com/nissan/firstmate) to `~/firstmate`, follow its README, then rerun `scripts/sync.sh --apply` to install the crew dispatch profile.
+4. Optional, for Firstmate: clone [nissan/firstmate](https://github.com/nissan/firstmate) to `~/firstmate`, follow its README, then rerun `scripts/sync.sh --apply` to install the crew dispatch profile. An existing Firstmate home must be updated to include [#52](https://github.com/nissan/firstmate/pull/52) first.
 
 ## Updating
 
