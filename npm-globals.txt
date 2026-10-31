@@ -1,0 +1,8 @@
+# CLI tools installed globally with npm (one package per line).
+# Firstmate's bootstrap expects the *-axi tools on PATH.
+gh-axi
+quota-axi
+lavish-axi
+tasks-axi
+chrome-devtools-axi
+@railway/cli

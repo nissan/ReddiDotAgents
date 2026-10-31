@@ -1,0 +1,36 @@
+{
+  "defaultThinkingLevel": "auto",
+  "modelRoles": {
+    "default": "openai-codex/gpt-6.1-sol:auto",
+    "smol": "openai-codex/gpt-6-luna:auto",
+    "slow": "anthropic/claude-opus-5-5:auto",
+    "cheap": "@cheap_claude, @cheap_gpt, @cheap_gemini",
+    "mid": "@mid_claude, @mid_gpt, @mid_gemini, @mid_agclaude",
+    "high": "@high_claude, @high_gpt, @high_gemini, @high_agclaude",
+    "cheap_claude": "anthropic/claude-haiku-5-5:auto",
+    "cheap_gpt": "openai-codex/gpt-6-luna:auto",
+    "cheap_gemini": "google-antigravity/gemini-3.8-flash:auto",
+    "mid_claude": "anthropic/claude-sonnet-5-5:auto",
+    "mid_gpt": "openai-codex/gpt-6.1-terra:auto",
+    "mid_gemini": "google-antigravity/gemini-3.8-flash:auto",
+    "mid_agclaude": "google-antigravity/claude-sonnet-5-5:auto",
+    "high_claude": "anthropic/claude-opus-5-5:auto",
+    "high_gpt": "openai-codex/gpt-6.1-sol:auto",
+    "high_gemini": "google-antigravity/gemini-4-argon:auto",
+    "high_agclaude": "google-antigravity/claude-opus-5-5:auto",
+    "judge": "openai-codex/gpt-6-luna"
+  },
+  "task.agentModelOverrides": {
+    "scout": "@cheap",
+    "sonic": "@cheap",
+    "task": "@mid",
+    "reviewer": "@high",
+    "security-reviewer": "@high"
+  },
+  "task.enableEffort": true,
+  "task.maxEffort": "high",
+  "retry.fallbackChains": {
+    "judge": ["anthropic/claude-haiku-5-5", "google-antigravity/gemini-3.8-flash"],
+    "default": ["anthropic/claude-opus-5-5", "google-antigravity/claude-opus-5-5"]
+  }
+}
