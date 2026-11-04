@@ -41,7 +41,7 @@ git pull --ff-only          # on a refresh
 scripts/sync.sh --check
 ```
 
-Summarise the DRIFT and MISSING lines for the user, then:
+Summarise the DRIFT and MISSING lines for the user. If the check lists a "machine-local entries" section, `--apply` will stop without changing anything until the user decides, per the README section "Machine-local additions", whether to declare those entries in `local.json` or create that file containing only `{}` so the kit drops them. Then:
 
 ```sh
 scripts/sync.sh --apply
@@ -95,11 +95,9 @@ Changes to the kit are made here, then pulled by every machine.
 1. Edit the kit files: `omp/settings.json`, `omp/extensions/`, `pi/settings.json`, `shared/fleet-rules.md`, `firstmate/crew-dispatch.json`, `firstmate/crew-dispatch.cursor.json`, `npm-globals.txt`, or `scripts/sync.sh`.
 2. Test the script against throwaway directories, never the user's real ones:
    ```sh
-   S=$(mktemp -d); mkdir -p "$S/omp" "$S/pi"
-   PI_CODING_AGENT_DIR="$S/omp" REDDIDOTAGENTS_PI_DIR="$S/pi" REDDIDOTAGENTS_BACKUP_DIR="$S/bak" \
-     scripts/sync.sh --apply --skip-npm --skip-herdr --firstmate-home "$S/none"
+   scripts/test-sync.sh
    ```
-   A second `--check` against the same directories must print `In sync.`
+   It must end with `0 failed`. It runs the sync with a stand-in `omp` and a stub Firstmate home, covering fresh installs, `local.json` additions, kit removals, idempotence, and the migration stop.
 3. Scan for secrets and personal data before every commit:
    ```sh
    mise exec gitleaks@latest -- gitleaks git --redact .

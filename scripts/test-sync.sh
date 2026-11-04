@@ -160,6 +160,18 @@ CHECK_OUT=$OUT
 check "check reports undeclared entries and exits 1" 1 "$RC"
 check "check still lists them as MISSING" 1 "$(grep -c 'MISSING omp modelRoles cheap: @cheap_extra' <<<"$OUT")"
 
+# --- 4b. A local rule listed before the kit's rules is reported as the extra; kit rules are matched by their when text.
+K4b="$S/k4b"; M4b="$S/m4b"; new_kit "$K4b"; new_machine "$M4b"
+jq '{rules: ([{"when":"Docs-only edits","use":[{"harness":"omp","model":"@cheap_gpt"}]}] + (.rules | map(del(.tier)))), default}' \
+  "$ROOT/firstmate/crew-dispatch.json" >"$M4b/fm/config/crew-dispatch.json"
+run_sync "$K4b" "$M4b" "$M4b/local.json" --check
+check "reordered file still stops the run" 1 "$RC"
+check "the inserted local rule is the only reported dispatch entry" "MISSING firstmate rule 1: Docs-only edits" "$(grep -o 'MISSING firstmate.*' <<<"$OUT")"
+jq '.preferred_provider = "codex"' "$ROOT/firstmate/crew-dispatch.json" >"$M4b/fm/config/crew-dispatch.json"
+run_sync "$K4b" "$M4b" "$M4b/local.json" --check
+check "a top-level key the kit does not write says it cannot be declared" 1 \
+  "$(grep -c 'MISSING firstmate crew-dispatch.json keys the kit does not write: preferred_provider (local.json cannot declare these' <<<"$OUT")"
+
 # --- 5. An empty local.json is the explicit choice to let the kit own the lists.
 printf '{}\n' >"$M4/local.json"
 run_sync "$K4" "$M4" "$M4/local.json" --apply
@@ -181,6 +193,18 @@ run_sync "$K6" "$M6" "$M6/local.json" --apply
 check "unknown firstmate key in local.json is rejected" 2 "$RC"
 check "rejection names the accepted firstmate keys" 1 "$(grep -c 'firstmate keys must be use, rules, or default' <<<"$OUT")"
 check "rejection wrote no dispatch file" "absent" "$([ -e "$M6/fm/config/crew-dispatch.json" ] && echo present || echo absent)"
+printf '{"firstmate": {"rules": [{"use": [{"harness": "omp", "model": "@cheap_gpt"}]}]}}\n' >"$M6/local.json"
+run_sync "$K6" "$M6" "$M6/local.json" --apply
+check "a local rule without when is rejected" 2 "$RC"
+check "rejection names the rule shape" 1 "$(grep -c 'each firstmate.rules entry must be an object with a non-empty when' <<<"$OUT")"
+printf '{"firstmate": {"use": {"cheap": [{"model": "@cheap_local"}]}}}\n' >"$M6/local.json"
+run_sync "$K6" "$M6" "$M6/local.json" --apply
+check "a local lane without harness is rejected" 2 "$RC"
+check "rejection names the lane shape" 1 "$(grep -c 'each firstmate.use.<tier> profile must be an object with a non-empty harness' <<<"$OUT")"
+printf '{"firstmate": {"default": ["@mid_local"]}}\n' >"$M6/local.json"
+run_sync "$K6" "$M6" "$M6/local.json" --apply
+check "a default entry that is not a profile object is rejected" 2 "$RC"
+check "rejection wrote no dispatch file after shape errors" "absent" "$([ -e "$M6/fm/config/crew-dispatch.json" ] && echo present || echo absent)"
 printf '{"omp": {"defaultThinkingLevel": "high"}}\n' >"$M6/local.json"
 run_sync "$K6" "$M6" "$M6/local.json" --apply
 check "scalar kit keys cannot be overridden locally" 2 "$RC"
