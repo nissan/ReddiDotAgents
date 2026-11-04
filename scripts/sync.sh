@@ -89,6 +89,10 @@ load_local() { # read and validate local.json when present
   HAVE_LOCAL=1
   local err
   err=$(jq -rn --argjson l "$LOCAL" --slurpfile o "$ROOT/omp/settings.json" --slurpfile f "$ROOT/firstmate/crew-dispatch.json" '
+    def profile_bad: type != "object" or (.harness | type) != "string" or (.harness | length) == 0;
+    def rule_bad:
+      type != "object" or (.when | type) != "string" or (.when | length) == 0
+      or (.use | type) != "array" or (.use | length) == 0 or any(.use[]; profile_bad);
     ($o[0] | to_entries | map(select(.value | type == "object") | .key)) as $okeys
     | ($f[0].rules | map(.tier)) as $tiers
     | if ($l | type) != "object" then "must be a JSON object"
@@ -105,6 +109,10 @@ load_local() { # read and validate local.json when present
       elif ([($l.firstmate.use // {})[] | select(type != "array")] | length) > 0 then "firstmate.use.<tier> must be an array of profiles"
       elif (($l.firstmate // {}) | has("rules")) and ($l.firstmate.rules | type) != "array" then "firstmate.rules must be an array of rules"
       elif (($l.firstmate // {}) | has("default")) and ($l.firstmate.default | type) != "array" then "firstmate.default must be an array of profiles"
+      elif ([($l.firstmate.use // {})[][] | select(profile_bad)] | length) > 0 then "each firstmate.use.<tier> profile must be an object with a non-empty harness"
+      elif ([($l.firstmate.default // [])[] | select(profile_bad)] | length) > 0 then "each firstmate.default profile must be an object with a non-empty harness"
+      elif ([($l.firstmate.rules // [])[] | select(rule_bad)] | length) > 0 then
+        "each firstmate.rules entry must be an object with a non-empty when and a non-empty use array of profiles with a harness"
       else empty
       end')
   [ -z "$err" ] || { echo "$LOCAL_FILE: $err" >&2; exit 2; }
@@ -140,12 +148,14 @@ undeclared_entries() { # one line per machine entry the kit does not define
     def lanes: if type == "array" then map(select(type == "object") | ukey) else [] end;
     $k[0] as $w
     | if type != "object" then empty else
-        ((keys - ($w | keys)) as $x | select(($x | length) > 0) | "firstmate crew-dispatch.json keys the kit does not write: \($x | join(", "))"),
+        ((keys - ($w | keys)) as $x | select(($x | length) > 0)
+          | "firstmate crew-dispatch.json keys the kit does not write: \($x | join(", ")) (local.json cannot declare these: drop them or add them to the kit)"),
         ((if (.rules | type) == "array" then .rules else [] end) | to_entries[] | .key as $i | .value as $r
-          | if $i < ($w.rules | length) then
-              ((($r | if type == "object" then .use else null end) | lanes) - ($w.rules[$i].use | lanes)) as $x
+          | ($w.rules | map(select(.when == ($r | if type == "object" then .when else null end))) | first) as $kr
+          | if $kr != null then
+              (($r.use | lanes) - ($kr.use | lanes)) as $x
               | select(($x | length) > 0)
-              | "firstmate rule \($w.rules[$i].tier) lanes: \($x | join(", "))"
+              | "firstmate rule \($kr.tier) lanes: \($x | join(", "))"
             else "firstmate rule \($i + 1): \($r | if type == "object" then (.when // "" | tostring | .[0:60]) else tostring end)" end),
         (((.default | lanes) - ($w.default | lanes)) as $x | select(($x | length) > 0) | "firstmate default lanes: \($x | join(", "))")
       end' "$FM_HOME/config/crew-dispatch.json" 2>/dev/null || true
@@ -160,7 +170,7 @@ local_guard() { # without local.json, stop on entries the kit does not define in
   section "machine-local entries"
   while IFS= read -r line; do missing "$line"; done <<<"$entries"
   printf '  These are neither in the kit nor declared in %s.\n' "$LOCAL_FILE"
-  printf '  Keep them: declare them in that file (README, "Machine-local additions").\n'
+  printf '  Keep lanes and rules: declare them in that file (README, "Machine-local additions").\n'
   printf '  Let the kit drop them: create that file containing only {}.\n'
   [ "$MODE" = apply ] || return 0
   printf '\nNothing was changed.\n'
