@@ -151,9 +151,7 @@ check "apply refuses undeclared entries" 2 "$RC"
 check "apply left omp and dispatch untouched" "$before" "$(cat "$M4/omp/config.yml" "$M4/fm/config/crew-dispatch.json")"
 check "no backup directory was created by the refusal" "absent" "$([ -e "$M4/bak" ] && echo present || echo absent)"
 check "refusal names the undeclared omp lane" 1 "$(grep -c 'MISSING omp modelRoles cheap: @cheap_extra' <<<"$OUT")"
-check "refusal names the undeclared dispatch lane" 1 "$(grep -c 'MISSING firstmate rule cheap lanes: omp:@cheap_extra' <<<"$OUT")"
 check "refusal names the undeclared dispatch rule" 1 "$(grep -c 'MISSING firstmate rule 5: Docs-only edits' <<<"$OUT")"
-check "refusal names the undeclared default lane" 1 "$(grep -c 'MISSING firstmate default lanes: omp:@mid_extra' <<<"$OUT")"
 check "refusal points at the local file" 1 "$(grep -c "declared in $M4/local.json" <<<"$OUT")"
 run_sync "$K4" "$M4" "$M4/local.json" --check
 CHECK_OUT=$OUT
@@ -170,10 +168,29 @@ check "the inserted local rule is the only reported dispatch entry" "MISSING fir
 jq '.default = {"harness": "omp", "model": "@mine", "provider": "codex"}' "$ROOT/firstmate/crew-dispatch.json" >"$M4b/fm/config/crew-dispatch.json"
 run_sync "$K4b" "$M4b" "$M4b/local.json" --apply
 check "an object-form default lane the kit does not define stops the run" 2 "$RC"
-check "the object-form lane is named" "MISSING firstmate default lanes: omp:@mine" "$(grep -o 'MISSING firstmate.*' <<<"$OUT")"
 jq '.rules[0].use = {"harness": "omp", "model": "@solo", "provider": "codex"}' "$ROOT/firstmate/crew-dispatch.json" >"$M4b/fm/config/crew-dispatch.json"
+run_sync "$K4b" "$M4b" "$M4b/local.json" --apply
+check "an object-form rule lane the kit does not define stops the run" 2 "$RC"
+jq '.rules[0].use += [{"harness": "omp", "model": "@cheap_gpt", "provider": "codex", "effort": "high"}]
+    | .default += [{"harness": "omp", "model": "@high_gpt", "provider": "codex", "effort": "high"}]' \
+  "$ROOT/firstmate/crew-dispatch.json" >"$M4b/fm/config/crew-dispatch.json"
+before=$(cat "$M4b/fm/config/crew-dispatch.json")
+run_sync "$K4b" "$M4b" "$M4b/local.json" --apply
+check "a kit model at a different effort is a distinct lane and stops the run" 2 "$RC"
+check "the effort variant was not dropped" "$before" "$(cat "$M4b/fm/config/crew-dispatch.json")"
+cat >"$M4b/local.json" <<'JSON'
+{ "firstmate": { "use": { "cheap": [ { "harness": "omp", "model": "@cheap_gpt", "provider": "codex", "effort": "high" } ] },
+                 "default": [ { "harness": "omp", "model": "@high_gpt", "provider": "codex", "effort": "high" } ] } }
+JSON
+run_sync "$K4b" "$M4b" "$M4b/local.json" --apply
+check "declared effort variant lets apply proceed" 0 "$RC"
+check "declared effort variant is kept beside the kit's auto lane" '[["@cheap_gpt","auto"],["@cheap_gpt","high"]]' \
+  "$(dispatch '.rules[0].use | map(select(.model == "@cheap_gpt") | [.model, .effort])' "$M4b")"
+check "declared default effort variant is kept beside the kit's auto lane" '[["@high_gpt","medium"],["@high_gpt","high"]]' \
+  "$(dispatch '.default | map(select(.model == "@high_gpt") | [.model, .effort])' "$M4b")"
 run_sync "$K4b" "$M4b" "$M4b/local.json" --check
-check "an object-form rule lane is compared against its kit rule" "MISSING firstmate rule cheap lanes: omp:@solo" "$(grep -o 'MISSING firstmate.*' <<<"$OUT")"
+check "machine with a declared effort variant is in sync" "In sync." "$(tail -n1 <<<"$OUT")"
+rm "$M4b/local.json"
 jq '.preferred_provider = "codex"' "$ROOT/firstmate/crew-dispatch.json" >"$M4b/fm/config/crew-dispatch.json"
 run_sync "$K4b" "$M4b" "$M4b/local.json" --check
 check "a top-level key the kit does not write says it cannot be declared" 1 \
@@ -223,6 +240,8 @@ for bad in \
   '{"firstmate": {"use": {"cheap": [{"harness": "omp", "model": "@cheap_local"}]}}}' \
   '{"firstmate": {"default": [{"harness": "omp", "model": "@mid_local", "provider": "local", "effort": "ultra"}]}}' \
   '{"firstmate": {"use": {"mid": [{"harness": "omp", "model": "", "provider": "local"}]}}}' \
+  '{"firstmate": {"use": {"mid": [{"harness": "omp", "model": "@mid_local", "provider": "Local"}]}}}' \
+  '{"firstmate": {"default": [{"harness": "claude", "model": "opus", "provider": "my_provider"}]}}' \
   '{"firstmate": {"rules": [{"when": "Docs", "use": [{"harness": "omp", "model": "@cheap_gpt", "provider": "codex"}], "select": "first"}]}}' \
   '{"firstmate": {"rules": [{"when": "Docs", "use": [{"harness": "omp", "model": "@cheap_gpt", "provider": "codex"}, {"harness": "omp", "model": "@cheap_gpt", "provider": "codex"}]}]}}'; do
   printf '%s\n' "$bad" >"$M6/local.json"
