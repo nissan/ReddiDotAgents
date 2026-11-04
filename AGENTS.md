@@ -32,7 +32,7 @@ mise use -g node@lts jq gh herdr github:can1357/oh-my-pi pi
 
 - `pi` is optional; leave it out if the user only uses omp.
 - If herdr cannot be installed through mise on this platform, use its own installer from https://github.com/herdrdev/herdr.
-- `jq` must be real jq. Some systems ship `jaq` as `jq`, which breaks parts of Firstmate's dispatch resolver; check `jq --version`.
+- `jq` must be real jq. Some systems ship `jaq` as `jq`, which breaks parts of Firstmate's dispatch resolver; check `env jq --version` (using `env` so an agent harness's built-in `jq` does not mask the binary on `PATH`).
 
 ### 3. Preview and apply
 

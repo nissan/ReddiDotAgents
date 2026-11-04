@@ -93,10 +93,11 @@ scripts/sync.sh --apply --upgrade-npm   # also update the npm tools to @latest
 
 ## How the sync treats your own settings
 
-- **omp** (`~/.omp/agent/config.yml`): only the keys in [`omp/settings.json`](omp/settings.json) are managed. Record values such as `modelRoles` are merged key by key, so your own roles survive and the kit's roles win. omp rewrites the file when settings change, so YAML comments are not preserved; the pre-change file is kept in the backup.
-- **Pi** (`~/.pi/agent/settings.json`): deep-merged with [`pi/settings.json`](pi/settings.json). Other keys stay.
+- **omp** (`~/.omp/agent/config.yml`): only the keys in [`omp/settings.json`](omp/settings.json) are managed. Record values such as `modelRoles` are merged key by key: the kit's keys win, your own keys survive, and extra `@<role>` entries in `cheap`, `mid`, and `high` that reference your own keys stay in place after the kit's entries. omp rewrites the file when settings change, so YAML comments are not preserved; the pre-change file is kept in the backup.
+- **Pi** (`~/.pi/agent/settings.json`): deep-merged with [`pi/settings.json`](pi/settings.json); the kit's keys win and other keys stay.
 - **Instructions** (`AGENTS.md` in each harness's agent directory): the fleet rules live between `reddidotagents:begin` and `reddidotagents:end` markers. Text outside the markers is yours and is never changed.
-- **Whole files**: `provider-balancer.ts` and Firstmate's `config/crew-dispatch.json`.
+- **Firstmate** (`<firstmate-home>/config/crew-dispatch.json`): merged with [`firstmate/crew-dispatch.json`](firstmate/crew-dispatch.json) by matching each rule's `(harness, model)` selectors in `use`. On matched rules, the kit's `when`, `select`, and managed `use` entries win, while extra machine-local `use` lanes (and the local `why` note when extra lanes are present) and extra local rules stay. Other files in `config/` (such as `secondmate-harness`) are untouched.
+- **Whole files**: `provider-balancer.ts`.
 - **Backups**: every changed file is copied to `~/.reddidotagents-backups/<timestamp>/` first.
 - **Never touched**: logins, tokens, auth stores, sessions, and anything else in the agent directories.
 
@@ -107,6 +108,7 @@ A refresh reverts edits to managed keys. To customise durably, fork this reposit
 - **Fewer subscriptions:** remove that family's roles from the tier lists in `omp/settings.json` and from `firstmate/crew-dispatch.json`, and remove its lane in `LANES` in `provider-balancer.ts`. Without those edits, a provider you are not logged in to gets zero weight and is used only as a last-resort fallback.
 - **Different models:** edit the role values in `omp/settings.json`. Firstmate dispatch names roles, so it follows automatically.
 - **Concurrency cap or rules:** edit `shared/fleet-rules.md`.
+- **Extra machine-local lanes:** define additional `<tier>_<lane>` roles in `~/.omp/agent/config.yml` and reference `@<tier>_<lane>` in `cheap`/`mid`/`high` or in Firstmate's `config/crew-dispatch.json`; a refresh keeps them alongside the kit's lanes.
 
 Personal, machine-specific rules belong outside the managed block in your local `AGENTS.md`.
 
