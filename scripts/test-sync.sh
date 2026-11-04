@@ -80,16 +80,21 @@ cat >"$LOCAL" <<'JSON'
   "firstmate": {
     "use": {
       "cheap": [ { "harness": "omp", "model": "@cheap_local", "provider": "local" } ],
-      "mid": [ { "harness": "omp", "model": "@mid_local", "provider": "local", "effort": "high" } ]
+      "mid": [ { "harness": "omp", "model": "@mid_local", "provider": "local", "effort": "high" } ],
+      "high": [ { "harness": "omp", "model": "@high_gemini", "provider": "agy", "effort": "auto" } ]
     },
     "rules": [
       { "when": "Docs-only edits", "use": [ { "harness": "omp", "model": "@cheap_gpt", "provider": "codex" } ], "select": "quota-balanced", "why": "Local docs rule" }
     ],
-    "default": [ { "harness": "omp", "model": "@mid_local", "provider": "local" } ]
+    "default": [
+      { "harness": "omp", "model": "@mid_local", "provider": "local" },
+      { "harness": "omp", "model": "@high_gpt", "provider": "codex", "effort": "medium" }
+    ]
   }
 }
 JSON
 K2="$S/k2"; M2="$S/m2"; new_kit "$K2"; new_machine "$M2"
+printf '{"modelRoles": {"cheap_claude": "local/stale"}}' >"$M2/omp/config.yml"
 run_sync "$K2" "$M2" "$LOCAL" --apply
 check "apply with local.json exits 0" 0 "$RC"
 check "omp cheap = kit lanes then local lane" "@cheap_claude, @cheap_gpt, @cheap_gemini, @cheap_local" "$(roles cheap "$M2")"
@@ -107,6 +112,11 @@ check "local rule reusing a kit lane is kept whole" \
   "$(dispatch '.rules[4]' "$M2")"
 check "kit why text is installed on extended rules" "$(jq -r '.rules[0].why' "$ROOT/firstmate/crew-dispatch.json")" "$(jq -r '.rules[0].why' "$M2/fm/config/crew-dispatch.json")"
 check "default = kit lanes then local lane" '["@high_gpt","@high_claude","@high_gemini","@high_agclaude","@mid_local"]' "$(dispatch '.default | map(.model)' "$M2")"
+check "a local lane repeating a kit profile is written once in its rule" \
+  '[["@high_gpt","auto"],["@high_claude","auto"],["@high_gemini","auto"],["@high_agclaude","auto"]]' \
+  "$(dispatch '.rules[2].use | map([.model, .effort])' "$M2")"
+check "no rule or default repeats a harness, model, effort profile" '[]' \
+  "$(dispatch '[(.rules[].use), .default] | map(map([.harness, .model, .effort])) | map(select(length != (unique | length)))' "$M2")"
 run_sync "$K2" "$M2" "$LOCAL" --check
 check "machine with local.json is in sync after apply" "In sync." "$(tail -n1 <<<"$OUT")"
 before=$(cat "$M2/omp/config.yml" "$M2/fm/config/crew-dispatch.json")
@@ -146,6 +156,7 @@ check "refusal names the undeclared dispatch rule" 1 "$(grep -c 'MISSING firstma
 check "refusal names the undeclared default lane" 1 "$(grep -c 'MISSING firstmate default lanes: omp:@mid_extra' <<<"$OUT")"
 check "refusal points at the local file" 1 "$(grep -c "declared in $M4/local.json" <<<"$OUT")"
 run_sync "$K4" "$M4" "$M4/local.json" --check
+CHECK_OUT=$OUT
 check "check reports undeclared entries and exits 1" 1 "$RC"
 check "check still lists them as MISSING" 1 "$(grep -c 'MISSING omp modelRoles cheap: @cheap_extra' <<<"$OUT")"
 
@@ -156,6 +167,7 @@ check "empty local.json lets apply proceed" 0 "$RC"
 check "undeclared omp lane is dropped" "@cheap_claude, @cheap_gpt, @cheap_gemini" "$(roles cheap "$M4")"
 check "undeclared dispatch additions are dropped" "$(jq -cS . "$ROOT/firstmate/crew-dispatch.json")" "$(jq -cS . "$M4/fm/config/crew-dispatch.json")"
 check "the pre-change files were backed up" 2 "$(find "$M4/bak" -type f | wc -l | tr -d ' ')"
+check "check guidance points at migration, not a plain apply" 1 "$(grep -c 'apply will stop until the machine-local entries above are declared' <<<"$CHECK_OUT")"
 
 # --- 6. A malformed local.json is rejected before anything changes.
 K6="$S/k6"; M6="$S/m6"; new_kit "$K6"; new_machine "$M6"
@@ -164,6 +176,11 @@ run_sync "$K6" "$M6" "$M6/local.json" --apply
 check "unknown tier in local.json is rejected" 2 "$RC"
 check "rejection names the allowed tiers" 1 "$(grep -c 'firstmate.use tiers must be among: cheap, mid, high, frontier' <<<"$OUT")"
 check "rejection wrote no omp config" "absent" "$([ -e "$M6/omp/config.yml" ] && echo present || echo absent)"
+printf '{"firstmate": {"preferred_provider": "codex"}}\n' >"$M6/local.json"
+run_sync "$K6" "$M6" "$M6/local.json" --apply
+check "unknown firstmate key in local.json is rejected" 2 "$RC"
+check "rejection names the accepted firstmate keys" 1 "$(grep -c 'firstmate keys must be use, rules, or default' <<<"$OUT")"
+check "rejection wrote no dispatch file" "absent" "$([ -e "$M6/fm/config/crew-dispatch.json" ] && echo present || echo absent)"
 printf '{"omp": {"defaultThinkingLevel": "high"}}\n' >"$M6/local.json"
 run_sync "$K6" "$M6" "$M6/local.json" --apply
 check "scalar kit keys cannot be overridden locally" 2 "$RC"
