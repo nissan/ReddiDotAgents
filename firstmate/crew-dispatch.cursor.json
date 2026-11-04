@@ -1,6 +1,7 @@
 {
   "rules": [
     {
+      "tier": "cheap",
       "when": "Task-intake analysis determines side work that is clearly small, low-risk, routine, or mechanical (searching, reading logs, running tests), and a fast low-cost model can complete it without compromising the task.",
       "use": [
         { "harness": "omp", "model": "@cheap_cursor", "provider": "cursor" },
@@ -10,6 +11,7 @@
       "why": "Cheapest Cursor-subscription tier: Composer 2.5 or Grok Code Fast 1."
     },
     {
+      "tier": "mid",
       "when": "Task-intake analysis determines a clear, scoped fix or change of moderate size: the path and the acceptance evidence are both already clear.",
       "use": [
         { "harness": "omp", "model": "@mid_cursor", "provider": "cursor" },
@@ -19,6 +21,7 @@
       "why": "Mid Cursor-subscription tier: Claude Sonnet 5 (medium) or Grok 4.6."
     },
     {
+      "tier": "high",
       "when": "Task-intake analysis determines high complexity, uncertainty, or blast radius in a bounded task: cross-cutting design, security, concurrency, release-critical changes, or a review the owner asked for.",
       "use": [
         { "harness": "omp", "model": "@high_cursor", "provider": "cursor" },
@@ -28,6 +31,7 @@
       "why": "High Cursor-subscription tier: Claude Opus 5.5 or Grok 4.7."
     },
     {
+      "tier": "frontier",
       "when": "Task-intake analysis determines a big, ambiguous job expected to run for hours: the goal is clear but the path is not, and the work spans many files, systems, or decisions.",
       "use": [
         { "harness": "omp", "model": "@frontier_cursor", "provider": "cursor" }

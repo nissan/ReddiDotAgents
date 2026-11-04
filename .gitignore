@@ -6,3 +6,5 @@
 auth.json
 **/sessions/
 .reddidotagents-backups/
+# Machine-local additions to the kit (see README, "Machine-local additions").
+/local.json

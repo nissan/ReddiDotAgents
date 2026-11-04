@@ -1,6 +1,7 @@
 {
   "rules": [
     {
+      "tier": "cheap",
       "when": "Task-intake analysis determines side work that is clearly small, low-risk, routine, or mechanical (searching, reading logs, running tests), and a fast low-cost model can complete it without compromising the task.",
       "use": [
         { "harness": "omp", "model": "@cheap_gpt", "provider": "codex", "effort": "auto" },
@@ -11,6 +12,7 @@
       "why": "Cheapest current tier: GPT-6 Luna, Claude Haiku 5.5, Gemini 3.8 Flash (omp roles in ~/.omp/agent/config.yml). Quota decides the family; omp's auto classifier sets effort."
     },
     {
+      "tier": "mid",
       "when": "Task-intake analysis determines a clear, scoped fix or change of moderate size: the path and the acceptance evidence are both already clear.",
       "use": [
         { "harness": "omp", "model": "@mid_gpt", "provider": "codex", "effort": "auto" },
@@ -22,6 +24,7 @@
       "why": "Mid tier: GPT-6.1 Terra, Claude Sonnet 5.5, Gemini 3.8 Flash, Antigravity Claude Sonnet 5.5."
     },
     {
+      "tier": "high",
       "when": "Task-intake analysis determines high complexity, uncertainty, or blast radius in a bounded task: cross-cutting design, security, concurrency, release-critical changes, or a review the owner asked for.",
       "use": [
         { "harness": "omp", "model": "@high_gpt", "provider": "codex", "effort": "auto" },
@@ -33,6 +36,7 @@
       "why": "High tier: GPT-6.1 Sol, Claude Opus 5.5, Gemini 4 Argon, Antigravity Claude Opus 5.5."
     },
     {
+      "tier": "frontier",
       "when": "Task-intake analysis determines a big, ambiguous job expected to run for hours: the goal is clear but the path is not, and the work spans many files, systems, or decisions.",
       "use": [
         { "harness": "omp", "model": "@frontier_claude", "provider": "claude", "effort": "high" },
