@@ -159,7 +159,8 @@ CHECK_OUT=$OUT
 check "check reports undeclared entries and exits 1" 1 "$RC"
 check "check still lists them as MISSING" 1 "$(grep -c 'MISSING omp modelRoles cheap: @cheap_extra' <<<"$OUT")"
 
-# --- 4b. A local rule listed before the kit's rules is reported as the extra; kit rules are matched by their when text.
+# --- 4b. Any difference from the kit's dispatch file stops the run (reordered rules, object-form lanes, effort
+#         variants, extra top-level keys, rule-level options); declaring the entries, or an empty local.json, lets it proceed.
 K4b="$S/k4b"; M4b="$S/m4b"; new_kit "$K4b"; new_machine "$M4b"
 jq '{rules: ([{"when":"Docs-only edits","use":[{"harness":"omp","model":"@cheap_gpt"}]}] + (.rules | map(del(.tier)))), default}' \
   "$ROOT/firstmate/crew-dispatch.json" >"$M4b/fm/config/crew-dispatch.json"
