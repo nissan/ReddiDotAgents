@@ -167,6 +167,13 @@ jq '{rules: ([{"when":"Docs-only edits","use":[{"harness":"omp","model":"@cheap_
 run_sync "$K4b" "$M4b" "$M4b/local.json" --check
 check "reordered file still stops the run" 1 "$RC"
 check "the inserted local rule is the only reported dispatch entry" "MISSING firstmate rule 1: Docs-only edits" "$(grep -o 'MISSING firstmate.*' <<<"$OUT")"
+jq '.default = {"harness": "omp", "model": "@mine", "provider": "codex"}' "$ROOT/firstmate/crew-dispatch.json" >"$M4b/fm/config/crew-dispatch.json"
+run_sync "$K4b" "$M4b" "$M4b/local.json" --apply
+check "an object-form default lane the kit does not define stops the run" 2 "$RC"
+check "the object-form lane is named" "MISSING firstmate default lanes: omp:@mine" "$(grep -o 'MISSING firstmate.*' <<<"$OUT")"
+jq '.rules[0].use = {"harness": "omp", "model": "@solo", "provider": "codex"}' "$ROOT/firstmate/crew-dispatch.json" >"$M4b/fm/config/crew-dispatch.json"
+run_sync "$K4b" "$M4b" "$M4b/local.json" --check
+check "an object-form rule lane is compared against its kit rule" "MISSING firstmate rule cheap lanes: omp:@solo" "$(grep -o 'MISSING firstmate.*' <<<"$OUT")"
 jq '.preferred_provider = "codex"' "$ROOT/firstmate/crew-dispatch.json" >"$M4b/fm/config/crew-dispatch.json"
 run_sync "$K4b" "$M4b" "$M4b/local.json" --check
 check "a top-level key the kit does not write says it cannot be declared" 1 \
@@ -207,8 +214,22 @@ check "a default entry that is not a profile object is rejected" 2 "$RC"
 check "rejection wrote no dispatch file after shape errors" "absent" "$([ -e "$M6/fm/config/crew-dispatch.json" ] && echo present || echo absent)"
 printf '{"omp": {"defaultThinkingLevel": "high"}}\n' >"$M6/local.json"
 run_sync "$K6" "$M6" "$M6/local.json" --apply
-check "scalar kit keys cannot be overridden locally" 2 "$RC"
-check "rejection names the record-valued kit keys" 1 "$(grep -c 'omp keys must be record-valued kit keys' <<<"$OUT")"
+check "omp keys other than modelRoles are rejected" 2 "$RC"
+printf '{"omp": {"modelRoles": {"cheap": ["@cheap_local"], "cheap_local": "local/small-coder"}}}\n' >"$M6/local.json"
+run_sync "$K6" "$M6" "$M6/local.json" --apply
+check "a non-string tier value is rejected instead of ignored" 2 "$RC"
+check "rejection wrote no omp config for the bad tier value" "absent" "$([ -e "$M6/omp/config.yml" ] && echo present || echo absent)"
+for bad in \
+  '{"firstmate": {"use": {"cheap": [{"harness": "omp", "model": "@cheap_local"}]}}}' \
+  '{"firstmate": {"default": [{"harness": "omp", "model": "@mid_local", "provider": "local", "effort": "ultra"}]}}' \
+  '{"firstmate": {"use": {"mid": [{"harness": "omp", "model": "", "provider": "local"}]}}}' \
+  '{"firstmate": {"rules": [{"when": "Docs", "use": [{"harness": "omp", "model": "@cheap_gpt", "provider": "codex"}], "select": "first"}]}}' \
+  '{"firstmate": {"rules": [{"when": "Docs", "use": [{"harness": "omp", "model": "@cheap_gpt", "provider": "codex"}, {"harness": "omp", "model": "@cheap_gpt", "provider": "codex"}]}]}}'; do
+  printf '%s\n' "$bad" >"$M6/local.json"
+  run_sync "$K6" "$M6" "$M6/local.json" --apply
+  check "Firstmate would reject it, so the sync does: $bad" 2 "$RC"
+done
+check "no dispatch file was written by any rejected overlay" "absent" "$([ -e "$M6/fm/config/crew-dispatch.json" ] && echo present || echo absent)"
 
 printf '\n%d checks, %d failed\n' "$CASES" "$FAILS"
 [ "$FAILS" = 0 ]
