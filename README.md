@@ -138,10 +138,10 @@ Lanes, roles, or dispatch rules that belong to one machine (a local model, an ex
 ```
 
 - `omp.<key>` adds entries to a record-valued kit key such as `modelRoles`; the kit's own keys win. Inside `modelRoles`, the `cheap`, `mid`, and `high` values are appended to the kit's tier lists rather than replacing them.
-- `firstmate.use.<tier>` appends lanes to the kit rule with that `tier`; `firstmate.rules` appends whole rules; `firstmate.default` appends default lanes. Local lanes keep whatever `effort` you give them (or none); the kit's lanes carry `auto`.
+- `firstmate.use.<tier>` appends lanes to the kit rule with that `tier`; `firstmate.rules` appends whole rules; `firstmate.default` appends default lanes. No other `firstmate` keys are accepted. Local lanes keep whatever `effort` you give them (or none); the kit's lanes carry `auto`. A local lane that repeats a kit lane's harness, model, and effort is written once, since Firstmate rejects a rule with duplicate profiles.
 - The kit stays canonical: removing a lane or rewording a `why` in the kit reaches every machine, and anything in the managed lists that is neither in the kit nor in `local.json` is replaced on `--apply` (the previous file is backed up).
 
-**Migration.** Until a machine has a `local.json`, the sync refuses to change a tier list or dispatch file that contains entries the kit does not define, and lists them under `MISSING`. Declare the ones you want to keep in `local.json`, or create the file containing only `{}` to let the kit drop them, then rerun. `scripts/test-sync.sh` exercises these rules against throwaway directories.
+**Migration.** Until a machine has a `local.json`, a tier list or dispatch file that contains entries the kit does not define stops the whole run: `--check` lists them under `MISSING` and `--apply` exits before changing anything on the machine, including the fleet rules, extension, Pi, npm, and herdr surfaces. Declare the ones you want to keep in `local.json`, or create the file containing only `{}` to let the kit drop them, then rerun. `scripts/test-sync.sh` exercises these rules against throwaway directories.
 
 ## Platform support
 

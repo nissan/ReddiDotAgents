@@ -66,7 +66,7 @@ BLOCK_BEGIN='<!-- reddidotagents:begin (managed by ReddiDotAgents; edit the Redd
 BLOCK_END='<!-- reddidotagents:end -->'
 LOCAL_FILE=${REDDIDOTAGENTS_LOCAL:-$ROOT/local.json}
 LOCAL='{}' HAVE_LOCAL=0
-DRIFT=0 MISSING=0
+DRIFT=0 MISSING=0 GUARDED=0
 
 section() { printf '\n== %s\n' "$1"; }
 ok() { printf '  ok      %s\n' "$1"; }
@@ -97,6 +97,8 @@ load_local() { # read and validate local.json when present
         "omp keys must be record-valued kit keys (\($okeys | join(", ")))"
       elif ([($l.omp // {})[] | select(type != "object")] | length) > 0 then "omp values must be objects"
       elif ($l | has("firstmate")) and ($l.firstmate | type) != "object" then "firstmate must be an object"
+      elif ([($l.firstmate // {}) | keys[] | select(. != "use" and . != "rules" and . != "default")] | length) > 0 then
+        "firstmate keys must be use, rules, or default"
       elif (($l.firstmate // {}) | has("use")) and ($l.firstmate.use | type) != "object" then "firstmate.use must be an object keyed by tier"
       elif ([($l.firstmate.use // {}) | keys[] | select(. as $t | $tiers | index($t) | not)] | length) > 0 then
         "firstmate.use tiers must be among: \($tiers | join(", "))"
@@ -138,7 +140,7 @@ undeclared_entries() { # one line per machine entry the kit does not define
     def lanes: if type == "array" then map(select(type == "object") | ukey) else [] end;
     $k[0] as $w
     | if type != "object" then empty else
-        ((keys - ($w | keys)) as $x | select(($x | length) > 0) | "firstmate crew-dispatch.json keys: \($x | join(", "))"),
+        ((keys - ($w | keys)) as $x | select(($x | length) > 0) | "firstmate crew-dispatch.json keys the kit does not write: \($x | join(", "))"),
         ((if (.rules | type) == "array" then .rules else [] end) | to_entries[] | .key as $i | .value as $r
           | if $i < ($w.rules | length) then
               ((($r | if type == "object" then .use else null end) | lanes) - ($w.rules[$i].use | lanes)) as $x
@@ -154,6 +156,7 @@ local_guard() { # without local.json, stop on entries the kit does not define in
   local entries line
   entries=$(undeclared_entries)
   [ -n "$entries" ] || return 0
+  GUARDED=1
   section "machine-local entries"
   while IFS= read -r line; do missing "$line"; done <<<"$entries"
   printf '  These are neither in the kit nor declared in %s.\n' "$LOCAL_FILE"
@@ -277,11 +280,13 @@ sync_firstmate() {
     cur=$(jq -c . "$file" 2>/dev/null) || cur='{}'
   fi
   merged=$(jq -cn --argjson l "$(jq -c '.firstmate // {}' <<<"$LOCAL")" --slurpfile w "$ROOT/firstmate/crew-dispatch.json" '
+    def profile_id: [.harness, (.model // null), (.effort // null)];
+    def first_per_profile: reduce .[] as $p ([]; if any(.[]; profile_id == ($p | profile_id)) then . else . + [$p] end);
     $w[0] as $kit
     | ($l.use // {}) as $use
-    | ($l | del(.use)) * $kit * {
-        rules: ([$kit.rules[] | .use += ($use[.tier // ""] // [])] + ($l.rules // [])),
-        default: ($kit.default + ($l.default // []))
+    | $kit * {
+        rules: ([$kit.rules[] | .use = ((.use + ($use[.tier // ""] // [])) | first_per_profile)] + ($l.rules // [])),
+        default: (($kit.default + ($l.default // [])) | first_per_profile)
       }')
   if [ -f "$file" ] && [ "$(jq -cS . <<<"$merged")" = "$(jq -cS . <<<"$cur")" ]; then
     ok "config/crew-dispatch.json"
@@ -354,5 +359,9 @@ if [ "$DRIFT" = 0 ] && [ "$MISSING" = 0 ]; then
   printf 'In sync.\n'
   exit 0
 fi
-printf 'Drift found. Review it, then run scripts/sync.sh --apply.\n'
+if [ "$GUARDED" = 1 ]; then
+  printf 'Drift found. scripts/sync.sh --apply will stop until the machine-local entries above are declared in %s or that file exists with only {}.\n' "$LOCAL_FILE"
+else
+  printf 'Drift found. Review it, then run scripts/sync.sh --apply.\n'
+fi
 exit 1
