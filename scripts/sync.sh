@@ -14,8 +14,9 @@
 #   npm   global CLI tools listed in npm-globals.txt
 #   herdr omp and pi integrations (`herdr integration install`)
 # Machine-local additions live in local.json next to this kit (git-ignored; see README).
-# Without that file, a machine whose tier lists or dispatch file carry entries the kit
-# does not define is reported and --apply stops before changing anything.
+# Without that file, a machine whose tier lists carry entries the kit does not define,
+# or whose dispatch file differs from the kit's, is reported and --apply stops before
+# changing anything.
 # Credentials, logins, sessions and auth stores are never read or written.
 #
 # --check exits 1 when anything drifts, 0 when the machine matches the kit.
@@ -39,9 +40,9 @@ Usage: scripts/sync.sh [--check | --apply] [options]
   -h, --help              Show this help.
 
 Environment: REDDIDOTAGENTS_PI_DIR overrides the Pi agent dir (default ~/.pi/agent);
-REDDIDOTAGENTS_LOCAL overrides the machine-local additions file (default
-<kit>/local.json); the omp agent dir is whatever `omp config path` reports
-(PI_CODING_AGENT_DIR or --profile select another one).
+the omp agent dir is whatever `omp config path` reports (PI_CODING_AGENT_DIR
+or --profile select another one). Machine-local additions are read from
+<kit>/local.json.
 EOF
 }
 
@@ -74,7 +75,7 @@ esac
 BACKUP_DIR=${REDDIDOTAGENTS_BACKUP_DIR:-$HOME/.reddidotagents-backups}/$(date +%Y%m%d-%H%M%S)
 BLOCK_BEGIN='<!-- reddidotagents:begin (managed by ReddiDotAgents; edit the ReddiDotAgents repo, not this block) -->'
 BLOCK_END='<!-- reddidotagents:end -->'
-LOCAL_FILE=${REDDIDOTAGENTS_LOCAL:-$ROOT/local.json}
+LOCAL_FILE=$ROOT/local.json
 LOCAL='{}' HAVE_LOCAL=0
 DRIFT=0 MISSING=0 GUARDED=0
 
@@ -150,7 +151,7 @@ fm_ready() { # $FM_HOME is a Firstmate checkout that accepts omp auto effort (ni
   { [ -d "$FM_HOME/.git" ] || [ -f "$FM_HOME/.git" ]; } && grep -qF '"xhigh","max","auto"' "$FM_HOME/bin/fm-bootstrap.sh" 2>/dev/null
 }
 
-undeclared_entries() { # one line per machine entry the kit does not define
+undeclared_entries() { # one line per machine-local difference the kit does not define
   if have omp; then
     jq -rn --argjson c "$(omp_get modelRoles)" --slurpfile k "$ROOT/omp/settings.json" '
       def items: split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0));
@@ -164,22 +165,9 @@ undeclared_entries() { # one line per machine entry the kit does not define
         else empty end'
   fi
   fm_ready && [ -f "$FM_HOME/config/crew-dispatch.json" ] || return 0
-  jq -r --slurpfile k "$DISPATCH_FILE" '
-    def ukey: "\(.harness // ""):\(.model // "")" + (if .effort != null then ":\(.effort)" else "" end);
-    def lanes: if type == "array" then map(select(type == "object") | ukey) elif type == "object" then [ukey] else [] end;
-    $k[0] as $w
-    | if type != "object" then empty else
-        ((keys - ($w | keys)) as $x | select(($x | length) > 0)
-          | "firstmate crew-dispatch.json keys the kit does not write: \($x | join(", ")) (local.json cannot declare these: drop them or add them to the kit)"),
-        ((if (.rules | type) == "array" then .rules else [] end) | to_entries[] | .key as $i | .value as $r
-          | ($w.rules | map(select(.when == ($r | if type == "object" then .when else null end))) | first) as $kr
-          | if $kr != null then
-              (($r.use | lanes) - ($kr.use | lanes)) as $x
-              | select(($x | length) > 0)
-              | "firstmate rule \($kr.tier) lanes: \($x | join(", "))"
-            else "firstmate rule \($i + 1): \($r | if type == "object" then (.when // "" | tostring | .[0:60]) else tostring end)" end),
-        (((.default | lanes) - ($w.default | lanes)) as $x | select(($x | length) > 0) | "firstmate default lanes: \($x | join(", "))")
-      end' "$FM_HOME/config/crew-dispatch.json" 2>/dev/null || true
+  if [ "$(jq -cS . "$FM_HOME/config/crew-dispatch.json" 2>/dev/null)" != "$(jq -cS . "$DISPATCH_FILE")" ]; then
+    printf 'firstmate config/crew-dispatch.json differs from the kit baseline %s (compare the two files; lanes and rules you want to keep go in local.json)\n' "${DISPATCH_FILE#"$ROOT"/}"
+  fi
 }
 
 local_guard() { # without local.json, stop on entries the kit does not define instead of dropping them
@@ -192,7 +180,7 @@ local_guard() { # without local.json, stop on entries the kit does not define in
   while IFS= read -r line; do missing "$line"; done <<<"$entries"
   printf '  These are neither in the kit nor declared in %s.\n' "$LOCAL_FILE"
   printf '  Keep lanes and rules: declare them in that file (README, "Machine-local additions").\n'
-  printf '  Let the kit drop them: create that file containing only {}.\n'
+  printf '  Accept the kit as is: create that file containing only {}.\n'
   [ "$MODE" = apply ] || return 0
   printf '\nNothing was changed.\n'
   exit 2
