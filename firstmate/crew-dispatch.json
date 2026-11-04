@@ -1,6 +1,7 @@
 {
   "rules": [
     {
+      "tier": "cheap",
       "when": "Task-intake analysis determines that the work is clearly small, low-risk, routine, or mechanical, and a fast low-cost model can complete it without compromising the task.",
       "use": [
         { "harness": "omp", "model": "@cheap_gpt", "provider": "codex", "effort": "auto" },
@@ -11,6 +12,7 @@
       "why": "Cheapest current tier: GPT-6 Luna, Claude Haiku 5.5, Gemini 3.8 Flash (omp roles in ~/.omp/agent/config.yml). Quota decides the family; omp's auto classifier sets effort."
     },
     {
+      "tier": "mid",
       "when": "Task-intake analysis determines ordinary engineering work of moderate scope: implementation, fixes, or investigation with a clear path and clear acceptance evidence.",
       "use": [
         { "harness": "omp", "model": "@mid_gpt", "provider": "codex", "effort": "auto" },
@@ -22,6 +24,7 @@
       "why": "Mid tier: GPT-6.1 Terra, Claude Sonnet 5.5, Gemini 3.8 Flash, Antigravity Claude Sonnet 5.5."
     },
     {
+      "tier": "high",
       "when": "Task-intake analysis determines high complexity, uncertainty, or blast radius: cross-cutting design, security, concurrency, release-critical changes, independent exact-head reviews, or ambiguous investigation.",
       "use": [
         { "harness": "omp", "model": "@high_gpt", "provider": "codex", "effort": "auto" },
