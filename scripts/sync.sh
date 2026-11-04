@@ -3,12 +3,13 @@
 #
 # Managed surfaces, each merged rather than replaced so personal settings survive:
 #   omp   ~/.omp/agent/config.yml keys listed in omp/settings.json, merged through
-#         `omp config get/set` (record values merge key-by-key; the kit wins per key)
+#         `omp config get/set` (record values merge key-by-key; the kit wins per key
+#         and preserves extra machine-local `@<tier>_<lane>` entries in cheap/mid/high)
 #         ~/.omp/agent/extensions/provider-balancer.ts
 #         ~/.omp/agent/AGENTS.md managed block <- shared/fleet-rules.md
 #   pi    ~/.pi/agent/settings.json keys from pi/settings.json (deep merge)
 #         ~/.pi/agent/AGENTS.md managed block <- shared/fleet-rules.md
-#   firstmate  <firstmate-home>/config/crew-dispatch.json (whole file)
+#   firstmate  <firstmate-home>/config/crew-dispatch.json (merged with kit rules/lanes)
 #   npm   global CLI tools listed in npm-globals.txt
 #   herdr omp and pi integrations (`herdr integration install`)
 # Credentials, logins, sessions and auth stores are never read or written.
@@ -126,8 +127,37 @@ sync_omp() {
     want=$(jq -c --arg k "$key" '.[$k]' "$ROOT/omp/settings.json")
     cur=$(omp config get "$key" --json 2>/dev/null | jq -c '.value' 2>/dev/null) || cur=null
     [ -n "$cur" ] || cur=null
-    merged=$(jq -cn --argjson c "$cur" --argjson w "$want" \
-      'if ($w | type) == "object" then (if ($c | type) == "object" then $c else {} end) * $w else $w end')
+    merged=$(jq -cn --arg k "$key" --argjson c "$cur" --argjson w "$want" '
+      if ($w | type) == "object" then
+        (if ($c | type) == "object" then $c else {} end) as $co
+        | ($co * $w) as $base
+        | if $k == "modelRoles" then
+            reduce ("cheap", "mid", "high") as $t ($base;
+              if ($w[$t] | type) == "string" and ($co[$t] | type) == "string" then
+                ($w[$t] | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))) as $wi
+                | ($co[$t] | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))) as $ci
+                | .[$t] = (
+                    ($wi + [
+                      $ci[]
+                      | select((. as $x | $wi | index($x)) == null)
+                      | select(
+                          startswith("@") and (
+                            (ltrimstr("@") | split(":")[0]) as $ref
+                            | ($base | has($ref)) and ($w | has($ref) | not)
+                          )
+                        )
+                    ]) | join(", ")
+                  )
+              else
+                .
+              end
+            )
+          else
+            $base
+          end
+      else
+        $w
+      end')
     if [ "$(jq -cS . <<<"$merged")" = "$(jq -cS . <<<"$cur")" ]; then ok "config $key"; continue; fi
     drift "config $key"
     [ "$MODE" = apply ] || continue
@@ -175,7 +205,64 @@ sync_firstmate() {
     missing "config/crew-dispatch.json: $FM_HOME predates omp auto effort (needs nissan/firstmate#52); update it, then rerun"
     return 0
   fi
-  sync_file "$DISPATCH_FILE" "$FM_HOME/config/crew-dispatch.json" "config/crew-dispatch.json ($DISPATCH profile)"
+  local file="$FM_HOME/config/crew-dispatch.json" cur='{}' merged
+  if [ -f "$file" ]; then
+    cur=$(jq -c . "$file" 2>/dev/null) || cur='{}'
+  fi
+  merged=$(jq -cn --argjson c "$cur" --slurpfile w "$DISPATCH_FILE" '
+    def ukey: "\(.harness // ""):\(.model // "")";
+    def merge_use($cu; $wu):
+      ($wu | map(ukey)) as $wkeys
+      | $wu + (
+          (if ($cu | type) == "array" then $cu else [] end)
+          | map(select((type == "object") and ((ukey as $k | $wkeys | index($k)) == null)))
+          | map(if .harness == "omp" and ((.model // "") | startswith("@")) and (has("effort") | not) then . + {effort: "auto"} else . end)
+        );
+    def matches_rule($cr; $wr):
+      ($wr.use | map(ukey)) as $wkeys
+      | (if ($cr | type) == "object" and ($cr.use | type) == "array" then $cr.use else [] end)
+      | any((type == "object") and ((ukey as $k | $wkeys | index($k)) != null));
+    (if ($c | type) == "object" then $c else {} end) as $co
+    | $w[0] as $want
+    | (if ($co.rules | type) == "array" then $co.rules else [] end) as $crules
+    | $co * $want * {
+        rules: (
+          [
+            $want.rules[] as $wr
+            | ($crules | map(select(matches_rule(.; $wr))) | first // {}) as $cr
+            | merge_use($cr.use; $wr.use) as $u
+            | $cr * $wr * {
+                use: $u,
+                why: (
+                  if ($u | length) > ($wr.use | length) and (($cr.why | type) == "string") and (($cr.why | length) > 0) then
+                    $cr.why
+                  else
+                    $wr.why
+                  end
+                )
+              }
+          ] + (
+            $crules | map(
+              select(
+                (type == "object") and (
+                  . as $cr | ($want.rules | any(matches_rule($cr; .)) | not)
+                )
+              )
+            )
+          )
+        ),
+        default: merge_use($co.default; $want.default)
+      }')
+  if [ -f "$file" ] && [ "$(jq -cS . <<<"$merged")" = "$(jq -cS . <<<"$cur")" ]; then
+    ok "config/crew-dispatch.json ($DISPATCH profile)"
+    return 0
+  fi
+  drift "config/crew-dispatch.json ($DISPATCH profile) ($file)"
+  [ "$MODE" = apply ] || return 0
+  backup "$file"
+  mkdir -p "$(dirname "$file")"
+  jq . <<<"$merged" >"$file"
+  wrote "$file"
 }
 
 sync_npm() {
