@@ -98,18 +98,28 @@ load_local() { # read and validate local.json when present
   LOCAL=$(jq -c . "$LOCAL_FILE" 2>/dev/null) || { echo "$LOCAL_FILE is not valid JSON" >&2; exit 2; }
   HAVE_LOCAL=1
   local err
-  err=$(jq -rn --argjson l "$LOCAL" --slurpfile o "$ROOT/omp/settings.json" --slurpfile f "$DISPATCH_FILE" '
-    def profile_bad: type != "object" or (.harness | type) != "string" or (.harness | length) == 0;
+  err=$(jq -rn --argjson l "$LOCAL" --slurpfile f "$DISPATCH_FILE" '
+    def nonempty: type == "string" and length > 0;
+    def profile_bad:
+      type != "object" or (.harness | nonempty | not)
+      or (has("model") and (.model | nonempty | not))
+      or (has("effort") and (.effort | nonempty | not))
+      or (.harness == "omp" and (
+           (.provider | nonempty | not)
+           or (has("effort") and (.effort as $e | ["low", "medium", "high", "xhigh", "max", "auto"] | index($e)) == null)));
+    def profile_id: [.harness, (.model // null), (.effort // null)];
     def rule_bad:
-      type != "object" or (.when | type) != "string" or (.when | length) == 0
-      or (.use | type) != "array" or (.use | length) == 0 or any(.use[]; profile_bad);
-    ($o[0] | to_entries | map(select(.value | type == "object") | .key)) as $okeys
-    | ($f[0].rules | map(.tier)) as $tiers
+      type != "object" or (.when | nonempty | not)
+      or (.use | type) != "array" or (.use | length) == 0 or any(.use[]; profile_bad)
+      or (has("select") and .select != "quota-balanced")
+      or ((.use | map(profile_id) | length) != (.use | map(profile_id) | unique | length));
+    ($f[0].rules | map(.tier)) as $tiers
     | if ($l | type) != "object" then "must be a JSON object"
       elif ($l | has("omp")) and ($l.omp | type) != "object" then "omp must be an object"
-      elif ([($l.omp // {}) | keys[] | select(. as $k | $okeys | index($k) | not)] | length) > 0 then
-        "omp keys must be record-valued kit keys (\($okeys | join(", ")))"
-      elif ([($l.omp // {})[] | select(type != "object")] | length) > 0 then "omp values must be objects"
+      elif ([($l.omp // {}) | keys[] | select(. != "modelRoles")] | length) > 0 then "omp keys must be modelRoles"
+      elif (($l.omp // {}) | has("modelRoles")) and ($l.omp.modelRoles | type) != "object" then "omp.modelRoles must be an object"
+      elif ([($l.omp.modelRoles // {}) | to_entries[] | select((.key == "cheap" or .key == "mid" or .key == "high" or .key == "frontier") and (.value | type) != "string")] | length) > 0 then
+        "omp.modelRoles cheap, mid, high, and frontier must be strings"
       elif ($l | has("firstmate")) and ($l.firstmate | type) != "object" then "firstmate must be an object"
       elif ([($l.firstmate // {}) | keys[] | select(. != "use" and . != "rules" and . != "default")] | length) > 0 then
         "firstmate keys must be use, rules, or default"
@@ -119,10 +129,10 @@ load_local() { # read and validate local.json when present
       elif ([($l.firstmate.use // {})[] | select(type != "array")] | length) > 0 then "firstmate.use.<tier> must be an array of profiles"
       elif (($l.firstmate // {}) | has("rules")) and ($l.firstmate.rules | type) != "array" then "firstmate.rules must be an array of rules"
       elif (($l.firstmate // {}) | has("default")) and ($l.firstmate.default | type) != "array" then "firstmate.default must be an array of profiles"
-      elif ([($l.firstmate.use // {})[][] | select(profile_bad)] | length) > 0 then "each firstmate.use.<tier> profile must be an object with a non-empty harness"
-      elif ([($l.firstmate.default // [])[] | select(profile_bad)] | length) > 0 then "each firstmate.default profile must be an object with a non-empty harness"
+      elif ([($l.firstmate.use // {})[][] | select(profile_bad)] | length) > 0 then "each firstmate.use.<tier> profile must be an object with a non-empty harness; model and effort non-empty when present; omp lanes need a provider and an effort among low, medium, high, xhigh, max, auto"
+      elif ([($l.firstmate.default // [])[] | select(profile_bad)] | length) > 0 then "each firstmate.default profile must be an object with a non-empty harness; model and effort non-empty when present; omp lanes need a provider and an effort among low, medium, high, xhigh, max, auto"
       elif ([($l.firstmate.rules // [])[] | select(rule_bad)] | length) > 0 then
-        "each firstmate.rules entry must be an object with a non-empty when and a non-empty use array of profiles with a harness"
+        "each firstmate.rules entry must be an object with a non-empty when, a non-empty use array of valid profiles with no repeated harness, model, effort, and select quota-balanced when present"
       else empty
       end')
   [ -z "$err" ] || { echo "$LOCAL_FILE: $err" >&2; exit 2; }
@@ -155,7 +165,7 @@ undeclared_entries() { # one line per machine entry the kit does not define
   fm_ready && [ -f "$FM_HOME/config/crew-dispatch.json" ] || return 0
   jq -r --slurpfile k "$DISPATCH_FILE" '
     def ukey: "\(.harness // ""):\(.model // "")";
-    def lanes: if type == "array" then map(select(type == "object") | ukey) else [] end;
+    def lanes: if type == "array" then map(select(type == "object") | ukey) elif type == "object" then [ukey] else [] end;
     $k[0] as $w
     | if type != "object" then empty else
         ((keys - ($w | keys)) as $x | select(($x | length) > 0)
@@ -227,7 +237,7 @@ sync_omp() {
   for key in $(jq -r 'keys[]' "$ROOT/omp/settings.json"); do
     want=$(jq -c --arg k "$key" '.[$k]' "$ROOT/omp/settings.json")
     cur=$(omp_get "$key")
-    merged=$(jq -cn --arg k "$key" --argjson c "$cur" --argjson w "$want" --argjson l "$(jq -c --arg k "$key" '.omp[$k] // {}' <<<"$LOCAL")" '
+    merged=$(jq -cn --arg k "$key" --argjson c "$cur" --argjson w "$want" --argjson l "$(jq -c --arg k "$key" 'if $k == "modelRoles" then .omp.modelRoles // {} else {} end' <<<"$LOCAL")" '
       def items: split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0));
       if ($w | type) == "object" then
         (if ($c | type) == "object" then $c else {} end) as $co
