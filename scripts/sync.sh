@@ -94,8 +94,9 @@ load_local() { # read and validate local.json when present
       type != "object" or (.harness | nonempty | not)
       or (has("model") and (.model | nonempty | not))
       or (has("effort") and (.effort | nonempty | not))
+      or (has("provider") and ((.provider | type) != "string" or (.provider | test("^[a-z0-9]+(-[a-z0-9]+)*$") | not)))
       or (.harness == "omp" and (
-           (.provider | nonempty | not)
+           (has("provider") | not)
            or (has("effort") and (.effort as $e | ["low", "medium", "high", "xhigh", "max", "auto"] | index($e)) == null)));
     def profile_id: [.harness, (.model // null), (.effort // null)];
     def rule_bad:
@@ -119,8 +120,8 @@ load_local() { # read and validate local.json when present
       elif ([($l.firstmate.use // {})[] | select(type != "array")] | length) > 0 then "firstmate.use.<tier> must be an array of profiles"
       elif (($l.firstmate // {}) | has("rules")) and ($l.firstmate.rules | type) != "array" then "firstmate.rules must be an array of rules"
       elif (($l.firstmate // {}) | has("default")) and ($l.firstmate.default | type) != "array" then "firstmate.default must be an array of profiles"
-      elif ([($l.firstmate.use // {})[][] | select(profile_bad)] | length) > 0 then "each firstmate.use.<tier> profile must be an object with a non-empty harness; model and effort non-empty when present; omp lanes need a provider and an effort among low, medium, high, xhigh, max, auto"
-      elif ([($l.firstmate.default // [])[] | select(profile_bad)] | length) > 0 then "each firstmate.default profile must be an object with a non-empty harness; model and effort non-empty when present; omp lanes need a provider and an effort among low, medium, high, xhigh, max, auto"
+      elif ([($l.firstmate.use // {})[][] | select(profile_bad)] | length) > 0 then "each firstmate.use.<tier> profile must be an object with a non-empty harness; model and effort non-empty when present; provider matching ^[a-z0-9]+(-[a-z0-9]+)*$ when present; omp lanes need a provider and an effort among low, medium, high, xhigh, max, auto"
+      elif ([($l.firstmate.default // [])[] | select(profile_bad)] | length) > 0 then "each firstmate.default profile must be an object with a non-empty harness; model and effort non-empty when present; provider matching ^[a-z0-9]+(-[a-z0-9]+)*$ when present; omp lanes need a provider and an effort among low, medium, high, xhigh, max, auto"
       elif ([($l.firstmate.rules // [])[] | select(rule_bad)] | length) > 0 then
         "each firstmate.rules entry must be an object with a non-empty when, a non-empty use array of valid profiles with no repeated harness, model, effort, and select quota-balanced when present"
       else empty
@@ -154,7 +155,7 @@ undeclared_entries() { # one line per machine entry the kit does not define
   fi
   fm_ready && [ -f "$FM_HOME/config/crew-dispatch.json" ] || return 0
   jq -r --slurpfile k "$ROOT/firstmate/crew-dispatch.json" '
-    def ukey: "\(.harness // ""):\(.model // "")";
+    def ukey: "\(.harness // ""):\(.model // "")" + (if .effort != null then ":\(.effort)" else "" end);
     def lanes: if type == "array" then map(select(type == "object") | ukey) elif type == "object" then [ukey] else [] end;
     $k[0] as $w
     | if type != "object" then empty else
