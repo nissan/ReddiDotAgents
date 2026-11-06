@@ -58,15 +58,15 @@ dispatch() { jq -c "$1" "$2/fm/config/crew-dispatch.json"; }
 
 # --- 1. Fresh machine, no local.json: the kit lands verbatim and a second check is clean.
 K1="$S/k1"; M1="$S/m1"; new_kit "$K1"; new_machine "$M1"
-git -C "$K1" init -q
-git -C "$K1" -c user.name=Test -c user.email=test@example.invalid add omp/settings.json firstmate/crew-dispatch.json
-git -C "$K1" -c user.name=Test -c user.email=test@example.invalid -c commit.gpgsign=false commit -qm baseline
+printf '%s\n' '{"accountPin":"personal","runtimePin":"pinned"}' >"$M1/omp/config.yml"
+printf '%s\n' 'private configuration' >"$M1/fm/config/unmanaged"
 run_sync "$K1" "$M1" --apply
 check "fresh apply exits 0" 0 "$RC"
 check "fresh apply installs the kit's modelRoles" "$(jq -cS .modelRoles "$ROOT/omp/settings.json")" "$(jq -cS .modelRoles "$M1/omp/config.yml")"
 check "fresh apply installs the kit's dispatch file" "$(jq -cS . "$ROOT/firstmate/crew-dispatch.json")" "$(jq -cS . "$M1/fm/config/crew-dispatch.json")"
 run_sync "$K1" "$M1" --check
 check "fresh machine is in sync after apply" "In sync." "$(tail -n1 <<<"$OUT")"
+cp "$K1/firstmate/crew-dispatch.json" "$S/original-dispatch-kit"
 
 # A later kit revision may retire a kit-owned lane and change its explanation
 # without making the unchanged previous installation look like a local edit.
@@ -81,7 +81,7 @@ check "explanation-only update is not treated as local" 0 "$(grep -c 'MISSING' <
 run_sync "$K1" "$M1WHY" --apply
 check "explanation-only update applies" 0 "$RC"
 check "explanation-only update reaches dispatch" "Explanation only" "$(jq -r '.rules[0].why' "$M1WHY/fm/config/crew-dispatch.json")"
-git -C "$K1" show HEAD:firstmate/crew-dispatch.json >"$K1/firstmate/crew-dispatch.json"
+cp "$S/original-dispatch-kit" "$K1/firstmate/crew-dispatch.json"
 jq '.modelRoles |= (del(.cheap_gemini) | .cheap = "@cheap_claude, @cheap_gpt")' "$K1/omp/settings.json" >"$S/settings-new"
 mv "$S/settings-new" "$K1/omp/settings.json"
 jq '.rules[0] |= (.use |= map(select(.model != "@cheap_gemini")) | .why = "Updated rationale")' "$K1/firstmate/crew-dispatch.json" >"$S/dispatch-new"
@@ -106,6 +106,8 @@ run_sync "$K1" "$M1" --apply
 check "historical refresh applies" 0 "$RC"
 check "historical kit lane retires" "@cheap_claude, @cheap_gpt" "$(roles cheap "$M1")"
 check "historical kit explanation updates" "Updated rationale" "$(jq -r '.rules[0].why' "$M1/fm/config/crew-dispatch.json")"
+check "refresh preserves unrelated account and runtime settings" '["personal","pinned"]' "$(jq -c '[.accountPin,.runtimePin]' "$M1/omp/config.yml")"
+check "refresh preserves unmanaged Firstmate file" 'private configuration' "$(cat "$M1/fm/config/unmanaged")"
 check "refresh backs up previous omp settings" "$(cat "$S/old-omp")" "$(cat "$M1/bak"/*/"${M1#/}"/omp/config.yml)"
 check "refresh backs up previous dispatch" "$(cat "$S/old-dispatch")" "$(cat "$M1/bak"/*/"${M1#/}"/fm/config/crew-dispatch.json)"
 run_sync "$K1" "$M1" --check
@@ -113,6 +115,28 @@ check "historical refresh is in sync" "In sync." "$(tail -n1 <<<"$OUT")"
 before=$(cat "$M1/omp/config.yml" "$M1/fm/config/crew-dispatch.json")
 run_sync "$K1" "$M1" --apply
 check "historical refresh is idempotent" "$before" "$(cat "$M1/omp/config.yml" "$M1/fm/config/crew-dispatch.json")"
+jq '.rules[0].why = "Second update"' "$K1/firstmate/crew-dispatch.json" >"$S/dispatch-new"
+mv "$S/dispatch-new" "$K1/firstmate/crew-dispatch.json"
+run_sync "$K1" "$M1" --apply
+check "second plain-copy refresh applies" 0 "$RC"
+check "second plain-copy refresh uses updated baseline" "Second update" "$(jq -r '.rules[0].why' "$M1/fm/config/crew-dispatch.json")"
+
+# Existing installations from before baseline bookkeeping may still use the
+# unchanged values in the kit's committed history.
+KH="$S/kh"; MH="$S/mh"; new_kit "$KH"; new_machine "$MH"
+git -C "$KH" init -q
+git -C "$KH" add omp/settings.json firstmate/crew-dispatch.json
+git -C "$KH" -c user.name=Test -c user.email=test@example.invalid -c commit.gpgsign=false commit -qm baseline
+run_sync "$KH" "$MH" --apply
+rm "$MH/omp/.reddidotagents-model-roles.json" "$MH/fm/config/.reddidotagents-crew-dispatch.json"
+jq '.modelRoles.cheap = "@cheap_claude, @cheap_gpt"' "$KH/omp/settings.json" >"$S/settings-new"
+mv "$S/settings-new" "$KH/omp/settings.json"
+jq '.rules[0].why = "Historical upgrade"' "$KH/firstmate/crew-dispatch.json" >"$S/dispatch-new"
+mv "$S/dispatch-new" "$KH/firstmate/crew-dispatch.json"
+run_sync "$KH" "$MH" --apply
+check "pre-bookkeeping install refreshes from committed kit history" 0 "$RC"
+check "pre-bookkeeping retirement is applied" "@cheap_claude, @cheap_gpt" "$(roles cheap "$MH")"
+check "pre-bookkeeping explanation is applied" "Historical upgrade" "$(jq -r '.rules[0].why' "$MH/fm/config/crew-dispatch.json")"
 
 # --- 2. Declared local additions survive, verbatim, after the kit's entries.
 LOCAL="$S/local-additions.json"
@@ -187,6 +211,12 @@ check "kit rationale refresh reaches the extended rule" "Updated cheap rationale
 check "local rule survives the kit change" "Docs-only edits" "$(jq -r '.rules[3].when' "$M2/fm/config/crew-dispatch.json")"
 run_sync "$K2" "$M2" --check
 check "in sync after the kit change" "In sync." "$(tail -n1 <<<"$OUT")"
+mv "$K2/local.json" "$S/removed-local.json"
+before=$(cat "$M2/omp/config.yml" "$M2/fm/config/crew-dispatch.json")
+run_sync "$K2" "$M2" --apply
+check "removing local.json does not authorize dropping its additions" 2 "$RC"
+check "removed local.json leaves installed additions intact" "$before" "$(cat "$M2/omp/config.yml" "$M2/fm/config/crew-dispatch.json")"
+mv "$S/removed-local.json" "$K2/local.json"
 
 # --- 4. No local.json and undeclared machine entries: report them and change nothing.
 K4="$S/k4"; M4="$S/m4"; new_kit "$K4"; new_machine "$M4"

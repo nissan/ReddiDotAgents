@@ -141,6 +141,25 @@ fm_ready() { # $FM_HOME is a Firstmate checkout that accepts omp auto effort (ni
   { [ -d "$FM_HOME/.git" ] || [ -f "$FM_HOME/.git" ]; } && grep -qF '"xhigh","max","auto"' "$FM_HOME/bin/fm-bootstrap.sh" 2>/dev/null
 }
 
+# Record kit-owned values only, after the corresponding surface has applied.
+save_baseline() { # <source> <jq filter> <destination>
+  [ "$MODE" = apply ] || return 0
+  local value previous
+  value=$(jq -cS "$2" "$1")
+  previous=$(jq -cS . "$3" 2>/dev/null) || previous=''
+  [ "$value" = "$previous" ] && return 0
+  backup "$3"
+  mkdir -p "$(dirname "$3")"
+  printf '%s\n' "$value" >"$3.tmp.$$"
+  mv "$3.tmp.$$" "$3"
+}
+
+baseline_match() { # <baseline> <jq filter> <current JSON>
+  local previous
+  previous=$(jq -cS "$2" "$1" 2>/dev/null) || return 1
+  [ "$previous" = "$3" ]
+}
+
 # Recognize an unmodified managed value from this kit's own committed history.
 # Without a matching historical value, retain the migration guard.
 historical_kit_match() { # <path> <jq filter> <current JSON>
@@ -157,8 +176,9 @@ historical_kit_match() { # <path> <jq filter> <current JSON>
 
 undeclared_entries() { # one line per machine-local difference the kit does not define
   if have omp; then
-    local current tier value extra
+    local current tier value extra omp_dir
     current=$(omp_get modelRoles)
+    omp_dir=$(omp config path)
     for tier in cheap mid high; do
       value=$(jq -cS --arg t "$tier" '.[$t]' <<<"$current")
       extra=$(jq -rn --argjson c "$value" --arg t "$tier" --slurpfile k "$ROOT/omp/settings.json" '
@@ -168,6 +188,7 @@ undeclared_entries() { # one line per machine-local difference the kit does not 
             (($c | items) - ($w | items)) | join(", ")
           else "" end')
       [ -n "$extra" ] || continue
+      baseline_match "$omp_dir/.reddidotagents-model-roles.json" ".$tier" "$value" && continue
       historical_kit_match omp/settings.json ".modelRoles.$tier" "$value" && continue
       printf 'omp modelRoles %s: %s\n' "$tier" "$extra"
     done
@@ -176,6 +197,7 @@ undeclared_entries() { # one line per machine-local difference the kit does not 
   local dispatch
   dispatch=$(jq -cS . "$FM_HOME/config/crew-dispatch.json" 2>/dev/null) || dispatch=''
   if [ "$dispatch" != "$(jq -cS . "$ROOT/firstmate/crew-dispatch.json")" ] &&
+     ! baseline_match "$FM_HOME/config/.reddidotagents-crew-dispatch.json" . "$dispatch" &&
      ! historical_kit_match firstmate/crew-dispatch.json . "$dispatch"; then
     printf 'firstmate config/crew-dispatch.json differs from the kit baseline firstmate/crew-dispatch.json (compare the two files; lanes and rules you want to keep go in local.json)\n'
   fi
@@ -266,6 +288,7 @@ sync_omp() {
     omp config set "$key" "$arg" >/dev/null
     wrote "config $key"
   done
+  save_baseline "$ROOT/omp/settings.json" .modelRoles "$dir/.reddidotagents-model-roles.json"
   sync_file "$ROOT/omp/extensions/provider-balancer.ts" "$dir/extensions/provider-balancer.ts" "extension provider-balancer.ts"
   managed_block "$ROOT/shared/fleet-rules.md" "$dir/AGENTS.md" "fleet rules in AGENTS.md"
 }
@@ -320,6 +343,7 @@ sync_firstmate() {
       }')
   if [ -f "$file" ] && [ "$(jq -cS . <<<"$merged")" = "$(jq -cS . <<<"$cur")" ]; then
     ok "config/crew-dispatch.json"
+    save_baseline "$ROOT/firstmate/crew-dispatch.json" . "$FM_HOME/config/.reddidotagents-crew-dispatch.json"
     return 0
   fi
   drift "config/crew-dispatch.json ($file)"
@@ -328,6 +352,7 @@ sync_firstmate() {
   mkdir -p "$(dirname "$file")"
   jq . <<<"$merged" >"$file"
   wrote "$file"
+  save_baseline "$ROOT/firstmate/crew-dispatch.json" . "$FM_HOME/config/.reddidotagents-crew-dispatch.json"
 }
 
 sync_npm() {
