@@ -55,6 +55,7 @@ run_sync() { # <kit> <machine> <mode>: output in $OUT, exit status in $RC; local
 
 roles() { jq -r --arg t "$1" '.modelRoles[$t]' "$2/omp/config.yml"; }
 dispatch() { jq -c "$1" "$2/fm/config/crew-dispatch.json"; }
+snapshot() { find "$1" -type f | sort | while IFS= read -r f; do printf '%s\n' "$f"; cat "$f"; done; }
 
 # --- 1. Fresh machine, no local.json: the kit lands verbatim and a second check is clean.
 K1="$S/k1"; M1="$S/m1"; new_kit "$K1"; new_machine "$M1"
@@ -129,14 +130,46 @@ git -C "$KH" add omp/settings.json firstmate/crew-dispatch.json
 git -C "$KH" -c user.name=Test -c user.email=test@example.invalid -c commit.gpgsign=false commit -qm baseline
 run_sync "$KH" "$MH" --apply
 rm "$MH/omp/.reddidotagents-model-roles.json" "$MH/fm/config/.reddidotagents-crew-dispatch.json"
+# The same clone reached through a symlinked path (as macOS temp directories are) owns the same history.
+ln -s "$KH" "$S/kh-link"
+MHL="$S/mhl"; new_machine "$MHL"
+run_sync "$S/kh-link" "$MHL" --apply
+rm "$MHL/omp/.reddidotagents-model-roles.json" "$MHL/fm/config/.reddidotagents-crew-dispatch.json"
 jq '.modelRoles.cheap = "@cheap_claude, @cheap_gpt"' "$KH/omp/settings.json" >"$S/settings-new"
 mv "$S/settings-new" "$KH/omp/settings.json"
-jq '.rules[0].why = "Historical upgrade"' "$KH/firstmate/crew-dispatch.json" >"$S/dispatch-new"
+jq '.rules[0] |= (.use |= map(select(.model != "@cheap_gemini")) | .why = "Historical upgrade")' "$KH/firstmate/crew-dispatch.json" >"$S/dispatch-new"
 mv "$S/dispatch-new" "$KH/firstmate/crew-dispatch.json"
 run_sync "$KH" "$MH" --apply
 check "pre-bookkeeping install refreshes from committed kit history" 0 "$RC"
 check "pre-bookkeeping retirement is applied" "@cheap_claude, @cheap_gpt" "$(roles cheap "$MH")"
 check "pre-bookkeeping explanation is applied" "Historical upgrade" "$(jq -r '.rules[0].why' "$MH/fm/config/crew-dispatch.json")"
+check "pre-bookkeeping dispatch lane retires" '["@cheap_gpt","@cheap_claude"]' "$(dispatch '.rules[0].use | map(.model)' "$MH")"
+run_sync "$S/kh-link" "$MHL" --apply
+check "symlinked pre-bookkeeping clone refreshes from its own history" 0 "$RC"
+check "symlinked clone retirement is applied" "@cheap_claude, @cheap_gpt" "$(roles cheap "$MHL")"
+check "symlinked clone explanation is applied" "Historical upgrade" "$(jq -r '.rules[0].why' "$MHL/fm/config/crew-dispatch.json")"
+
+# A machine that applied the current kit holds its baseline record. A lane or dispatch file it then
+# restores by hand from an older kit version is a personal customisation, not something the kit may drop.
+git -C "$KH" add omp/settings.json firstmate/crew-dispatch.json
+git -C "$KH" -c user.name=Test -c user.email=test@example.invalid -c commit.gpgsign=false commit -qm retire-gemini
+jq '.modelRoles.cheap = "@cheap_claude, @cheap_gpt, @cheap_gemini" | .accountPin = "personal"' "$MH/omp/config.yml" >"$S/omp-new"
+mv "$S/omp-new" "$MH/omp/config.yml"
+git -C "$KH" show HEAD~1:firstmate/crew-dispatch.json >"$MH/fm/config/crew-dispatch.json"
+before=$(snapshot "$MH")
+run_sync "$KH" "$MH" --check
+check "hand-restored older kit lane previews as a protected divergence" 1 "$RC"
+check "preview names the restored omp lane" 1 "$(grep -c 'MISSING omp modelRoles cheap: @cheap_gemini' <<<"$OUT")"
+check "preview reports the restored dispatch file" 1 "$(grep -c 'MISSING firstmate config/crew-dispatch.json differs from the kit baseline' <<<"$OUT")"
+run_sync "$KH" "$MH" --apply
+check "apply refuses to drop the hand-restored lane and dispatch file" 2 "$RC"
+check "refusal changes no personal setting, managed surface, or baseline record" "$before" "$(snapshot "$MH")"
+check "hand-restored lane survives" "@cheap_claude, @cheap_gpt, @cheap_gemini" "$(roles cheap "$MH")"
+printf 'not json\n' >"$MH/omp/.reddidotagents-model-roles.json"
+run_sync "$KH" "$MH" --apply
+check "an unreadable baseline record does not reopen kit history" 2 "$RC"
+check "unreadable record still names the restored omp lane" 1 "$(grep -c 'MISSING omp modelRoles cheap: @cheap_gemini' <<<"$OUT")"
+check "hand-restored lane survives the unreadable record" "@cheap_claude, @cheap_gpt, @cheap_gemini" "$(roles cheap "$MH")"
 
 # --- 2. Declared local additions survive, verbatim, after the kit's entries.
 LOCAL="$S/local-additions.json"

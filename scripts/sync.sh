@@ -166,12 +166,20 @@ historical_kit_match() { # <path> <jq filter> <current JSON>
   local top commit previous
   have git || return 1
   top=$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null) || return 1
-  [ "$top" = "$ROOT" ] || return 1
+  [ "$top" = "$(cd "$ROOT" && pwd -P)" ] || return 1
   while IFS= read -r commit; do
     previous=$(git -C "$ROOT" show "$commit:$1" 2>/dev/null | jq -cS "$2" 2>/dev/null) || continue
     [ "$previous" = "$3" ] && return 0
   done < <(git -C "$ROOT" log --format=%H -- "$1" 2>/dev/null)
   return 1
+}
+
+applied_kit_match() { # <baseline record> <record jq filter> <kit path> <kit jq filter> <current JSON>
+  if [ -e "$1" ]; then
+    baseline_match "$1" "$2" "$5"
+  else
+    historical_kit_match "$3" "$4" "$5"
+  fi
 }
 
 undeclared_entries() { # one line per machine-local difference the kit does not define
@@ -188,8 +196,7 @@ undeclared_entries() { # one line per machine-local difference the kit does not 
             (($c | items) - ($w | items)) | join(", ")
           else "" end')
       [ -n "$extra" ] || continue
-      baseline_match "$omp_dir/.reddidotagents-model-roles.json" ".$tier" "$value" && continue
-      historical_kit_match omp/settings.json ".modelRoles.$tier" "$value" && continue
+      applied_kit_match "$omp_dir/.reddidotagents-model-roles.json" ".$tier" omp/settings.json ".modelRoles.$tier" "$value" && continue
       printf 'omp modelRoles %s: %s\n' "$tier" "$extra"
     done
   fi
@@ -197,8 +204,7 @@ undeclared_entries() { # one line per machine-local difference the kit does not 
   local dispatch
   dispatch=$(jq -cS . "$FM_HOME/config/crew-dispatch.json" 2>/dev/null) || dispatch=''
   if [ "$dispatch" != "$(jq -cS . "$ROOT/firstmate/crew-dispatch.json")" ] &&
-     ! baseline_match "$FM_HOME/config/.reddidotagents-crew-dispatch.json" . "$dispatch" &&
-     ! historical_kit_match firstmate/crew-dispatch.json . "$dispatch"; then
+     ! applied_kit_match "$FM_HOME/config/.reddidotagents-crew-dispatch.json" . firstmate/crew-dispatch.json . "$dispatch"; then
     printf 'firstmate config/crew-dispatch.json differs from the kit baseline firstmate/crew-dispatch.json (compare the two files; lanes and rules you want to keep go in local.json)\n'
   fi
 }
