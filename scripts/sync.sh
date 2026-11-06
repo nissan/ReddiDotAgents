@@ -141,21 +141,42 @@ fm_ready() { # $FM_HOME is a Firstmate checkout that accepts omp auto effort (ni
   { [ -d "$FM_HOME/.git" ] || [ -f "$FM_HOME/.git" ]; } && grep -qF '"xhigh","max","auto"' "$FM_HOME/bin/fm-bootstrap.sh" 2>/dev/null
 }
 
+# Recognize an unmodified managed value from this kit's own committed history.
+# Without a matching historical value, retain the migration guard.
+historical_kit_match() { # <path> <jq filter> <current JSON>
+  local top commit previous
+  have git || return 1
+  top=$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null) || return 1
+  [ "$top" = "$ROOT" ] || return 1
+  while IFS= read -r commit; do
+    previous=$(git -C "$ROOT" show "$commit:$1" 2>/dev/null | jq -cS "$2" 2>/dev/null) || continue
+    [ "$previous" = "$3" ] && return 0
+  done < <(git -C "$ROOT" log --format=%H -- "$1" 2>/dev/null)
+  return 1
+}
+
 undeclared_entries() { # one line per machine-local difference the kit does not define
   if have omp; then
-    jq -rn --argjson c "$(omp_get modelRoles)" --slurpfile k "$ROOT/omp/settings.json" '
-      def items: split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0));
-      $k[0].modelRoles as $w
-      | if ($c | type) == "object" then
-          ("cheap", "mid", "high") as $t
-          | select(($c[$t] | type) == "string" and ($w[$t] | type) == "string")
-          | (($c[$t] | items) - ($w[$t] | items)) as $x
-          | select(($x | length) > 0)
-          | "omp modelRoles \($t): \($x | join(", "))"
-        else empty end'
+    local current tier value extra
+    current=$(omp_get modelRoles)
+    for tier in cheap mid high; do
+      value=$(jq -cS --arg t "$tier" '.[$t]' <<<"$current")
+      extra=$(jq -rn --argjson c "$value" --arg t "$tier" --slurpfile k "$ROOT/omp/settings.json" '
+        def items: split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0));
+        $k[0].modelRoles[$t] as $w
+        | if ($c | type) == "string" and ($w | type) == "string" then
+            (($c | items) - ($w | items)) | join(", ")
+          else "" end')
+      [ -n "$extra" ] || continue
+      historical_kit_match omp/settings.json ".modelRoles.$tier" "$value" && continue
+      printf 'omp modelRoles %s: %s\n' "$tier" "$extra"
+    done
   fi
   fm_ready && [ -f "$FM_HOME/config/crew-dispatch.json" ] || return 0
-  if [ "$(jq -cS . "$FM_HOME/config/crew-dispatch.json" 2>/dev/null)" != "$(jq -cS . "$ROOT/firstmate/crew-dispatch.json")" ]; then
+  local dispatch
+  dispatch=$(jq -cS . "$FM_HOME/config/crew-dispatch.json" 2>/dev/null) || dispatch=''
+  if [ "$dispatch" != "$(jq -cS . "$ROOT/firstmate/crew-dispatch.json")" ] &&
+     ! historical_kit_match firstmate/crew-dispatch.json . "$dispatch"; then
     printf 'firstmate config/crew-dispatch.json differs from the kit baseline firstmate/crew-dispatch.json (compare the two files; lanes and rules you want to keep go in local.json)\n'
   fi
 }
