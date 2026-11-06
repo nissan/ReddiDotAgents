@@ -171,6 +171,36 @@ check "an unreadable baseline record does not reopen kit history" 2 "$RC"
 check "unreadable record still names the restored omp lane" 1 "$(grep -c 'MISSING omp modelRoles cheap: @cheap_gemini' <<<"$OUT")"
 check "hand-restored lane survives the unreadable record" "@cheap_claude, @cheap_gpt, @cheap_gemini" "$(roles cheap "$MH")"
 
+# A kit may spell a tier list without spaces after the commas; the machine stores it with them.
+# That unchanged installation must still refresh, from the baseline record and from history alike.
+K7="$S/k7"; M7="$S/m7"; M7H="$S/m7h"; new_kit "$K7"; new_machine "$M7"; new_machine "$M7H"
+jq '.modelRoles.cheap = "@cheap_claude,@cheap_gpt,@cheap_gemini"' "$K7/omp/settings.json" >"$S/settings-new"
+mv "$S/settings-new" "$K7/omp/settings.json"
+git -C "$K7" init -q
+git -C "$K7" add omp/settings.json firstmate/crew-dispatch.json
+git -C "$K7" -c user.name=Test -c user.email=test@example.invalid -c commit.gpgsign=false commit -qm compact
+run_sync "$K7" "$M7" --apply
+check "compact kit spacing installs the spaced tier list" "@cheap_claude, @cheap_gpt, @cheap_gemini" "$(roles cheap "$M7")"
+run_sync "$K7" "$M7H" --apply
+rm "$M7H/omp/.reddidotagents-model-roles.json" "$M7H/fm/config/.reddidotagents-crew-dispatch.json"
+jq '.modelRoles |= (del(.cheap_gemini) | .cheap = "@cheap_claude,@cheap_gpt")' "$K7/omp/settings.json" >"$S/settings-new"
+mv "$S/settings-new" "$K7/omp/settings.json"
+run_sync "$K7" "$M7" --check
+check "compact-spacing retirement previews as drift" 1 "$RC"
+check "compact-spacing retirement is not treated as local" 0 "$(grep -c 'MISSING' <<<"$OUT" || true)"
+run_sync "$K7" "$M7" --apply
+check "compact-spacing retirement applies from the baseline record" 0 "$RC"
+check "compact-spacing kit lane retires" "@cheap_claude, @cheap_gpt" "$(roles cheap "$M7")"
+run_sync "$K7" "$M7H" --apply
+check "compact-spacing retirement applies from committed history" 0 "$RC"
+check "compact-spacing kit lane retires on the pre-bookkeeping install" "@cheap_claude, @cheap_gpt" "$(roles cheap "$M7H")"
+jq '.modelRoles.cheap += ", @private"' "$M7/omp/config.yml" >"$S/omp-new"
+mv "$S/omp-new" "$M7/omp/config.yml"
+before=$(snapshot "$M7")
+run_sync "$K7" "$M7" --apply
+check "a personal lane beside compact kit spacing still stops the run" 2 "$RC"
+check "the personal lane refusal changes nothing" "$before" "$(snapshot "$M7")"
+
 # --- 2. Declared local additions survive, verbatim, after the kit's entries.
 LOCAL="$S/local-additions.json"
 cat >"$LOCAL" <<'JSON'

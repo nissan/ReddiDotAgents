@@ -68,6 +68,7 @@ BLOCK_END='<!-- reddidotagents:end -->'
 LOCAL_FILE=$ROOT/local.json
 LOCAL='{}' HAVE_LOCAL=0
 DRIFT=0 MISSING=0 GUARDED=0
+JQ_ITEMS='def items: split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0));'
 
 section() { printf '\n== %s\n' "$1"; }
 ok() { printf '  ok      %s\n' "$1"; }
@@ -189,14 +190,14 @@ undeclared_entries() { # one line per machine-local difference the kit does not 
     omp_dir=$(omp config path)
     for tier in cheap mid high; do
       value=$(jq -cS --arg t "$tier" '.[$t]' <<<"$current")
-      extra=$(jq -rn --argjson c "$value" --arg t "$tier" --slurpfile k "$ROOT/omp/settings.json" '
-        def items: split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0));
+      extra=$(jq -rn --argjson c "$value" --arg t "$tier" --slurpfile k "$ROOT/omp/settings.json" "$JQ_ITEMS"'
         $k[0].modelRoles[$t] as $w
         | if ($c | type) == "string" and ($w | type) == "string" then
             (($c | items) - ($w | items)) | join(", ")
           else "" end')
       [ -n "$extra" ] || continue
-      applied_kit_match "$omp_dir/.reddidotagents-model-roles.json" ".$tier" omp/settings.json ".modelRoles.$tier" "$value" && continue
+      applied_kit_match "$omp_dir/.reddidotagents-model-roles.json" "$JQ_ITEMS .$tier | items" \
+        omp/settings.json "$JQ_ITEMS .modelRoles.$tier | items" "$(jq -c "$JQ_ITEMS items" <<<"$value")" && continue
       printf 'omp modelRoles %s: %s\n' "$tier" "$extra"
     done
   fi
@@ -265,8 +266,7 @@ sync_omp() {
   for key in $(jq -r 'keys[]' "$ROOT/omp/settings.json"); do
     want=$(jq -c --arg k "$key" '.[$k]' "$ROOT/omp/settings.json")
     cur=$(omp_get "$key")
-    merged=$(jq -cn --arg k "$key" --argjson c "$cur" --argjson w "$want" --argjson l "$(jq -c --arg k "$key" 'if $k == "modelRoles" then .omp.modelRoles // {} else {} end' <<<"$LOCAL")" '
-      def items: split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0));
+    merged=$(jq -cn --arg k "$key" --argjson c "$cur" --argjson w "$want" --argjson l "$(jq -c --arg k "$key" 'if $k == "modelRoles" then .omp.modelRoles // {} else {} end' <<<"$LOCAL")" "$JQ_ITEMS"'
       if ($w | type) == "object" then
         (if ($c | type) == "object" then $c else {} end) as $co
         | ($co * $l * $w) as $base
