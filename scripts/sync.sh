@@ -16,7 +16,8 @@
 # Machine-local additions live in local.json next to this kit (git-ignored; see README).
 # Without that file, a machine whose tier lists carry entries the kit does not define,
 # or whose dispatch file differs from the kit's, is reported and --apply stops before
-# changing anything.
+# changing anything, unless that value is an unmodified earlier kit value: the baseline
+# recorded by the last apply or, before any record exists, this kit's Git history.
 # Credentials, logins, sessions and auth stores are never read or written.
 #
 # --check exits 1 when anything drifts, 0 when the machine matches the kit.
