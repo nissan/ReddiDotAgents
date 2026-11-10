@@ -3,14 +3,21 @@
 #
 # Managed surfaces, each merged rather than replaced so personal settings survive:
 #   omp   ~/.omp/agent/config.yml keys listed in omp/settings.json, merged through
-#         `omp config get/set` (record values merge key-by-key; the kit wins per key)
+#         `omp config get/set` (record values merge key-by-key; the kit wins per key;
+#         the cheap/mid/high tier lists are the kit's entries plus those in local.json)
 #         ~/.omp/agent/extensions/provider-balancer.ts
 #         ~/.omp/agent/AGENTS.md managed block <- shared/fleet-rules.md
 #   pi    ~/.pi/agent/settings.json keys from pi/settings.json (deep merge)
 #         ~/.pi/agent/AGENTS.md managed block <- shared/fleet-rules.md
-#   firstmate  <firstmate-home>/config/crew-dispatch.json (whole file)
+#   firstmate  <firstmate-home>/config/crew-dispatch.json: the kit's rules and default
+#         lanes plus the lanes and rules declared in local.json
 #   npm   global CLI tools listed in npm-globals.txt
 #   herdr omp and pi integrations (`herdr integration install`)
+# Machine-local additions live in local.json next to this kit (git-ignored; see README).
+# Without that file, a machine whose tier lists carry entries the kit does not define,
+# or whose dispatch file differs from the kit's, is reported and --apply stops before
+# changing anything, unless that value is an unmodified earlier kit value: the baseline
+# recorded by the last apply or, before any record exists, this kit's Git history.
 # Credentials, logins, sessions and auth stores are never read or written.
 #
 # --check exits 1 when anything drifts, 0 when the machine matches the kit.
@@ -32,7 +39,8 @@ Usage: scripts/sync.sh [--check | --apply] [options]
 
 Environment: REDDIDOTAGENTS_PI_DIR overrides the Pi agent dir (default ~/.pi/agent);
 the omp agent dir is whatever `omp config path` reports (PI_CODING_AGENT_DIR
-or --profile select another one).
+or --profile select another one). Machine-local additions are read from
+<kit>/local.json.
 EOF
 }
 
@@ -58,7 +66,10 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BACKUP_DIR=${REDDIDOTAGENTS_BACKUP_DIR:-$HOME/.reddidotagents-backups}/$(date +%Y%m%d-%H%M%S)
 BLOCK_BEGIN='<!-- reddidotagents:begin (managed by ReddiDotAgents; edit the ReddiDotAgents repo, not this block) -->'
 BLOCK_END='<!-- reddidotagents:end -->'
-DRIFT=0 MISSING=0
+LOCAL_FILE=$ROOT/local.json
+LOCAL='{}' HAVE_LOCAL=0
+DRIFT=0 MISSING=0 GUARDED=0
+JQ_ITEMS='def items: split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0));'
 
 section() { printf '\n== %s\n' "$1"; }
 ok() { printf '  ok      %s\n' "$1"; }
@@ -73,6 +84,147 @@ backup() { # <file>: copy to the backup tree once per run, keeping its absolute 
   [ -e "$dest" ] && return 0
   mkdir -p "$(dirname "$dest")"
   cp -p "$1" "$dest"
+}
+
+load_local() { # read and validate local.json when present
+  [ -f "$LOCAL_FILE" ] || return 0
+  LOCAL=$(jq -c . "$LOCAL_FILE" 2>/dev/null) || { echo "$LOCAL_FILE is not valid JSON" >&2; exit 2; }
+  HAVE_LOCAL=1
+  local err
+  err=$(jq -rn --argjson l "$LOCAL" --slurpfile f "$ROOT/firstmate/crew-dispatch.json" '
+    def nonempty: type == "string" and length > 0;
+    def profile_bad:
+      type != "object" or (.harness | nonempty | not)
+      or (has("model") and (.model | nonempty | not))
+      or (has("effort") and (.effort | nonempty | not))
+      or (has("provider") and ((.provider | type) != "string" or (.provider | test("^[a-z0-9]+(-[a-z0-9]+)*$") | not)))
+      or (.harness == "omp" and (
+           (has("provider") | not)
+           or (has("effort") and (.effort as $e | ["low", "medium", "high", "xhigh", "max", "auto"] | index($e)) == null)));
+    def profile_id: [.harness, (.model // null), (.effort // null)];
+    def rule_bad:
+      type != "object" or (.when | nonempty | not)
+      or (.use | type) != "array" or (.use | length) == 0 or any(.use[]; profile_bad)
+      or (has("select") and .select != "quota-balanced")
+      or ((.use | map(profile_id) | length) != (.use | map(profile_id) | unique | length));
+    ($f[0].rules | map(.tier)) as $tiers
+    | if ($l | type) != "object" then "must be a JSON object"
+      elif ($l | has("omp")) and ($l.omp | type) != "object" then "omp must be an object"
+      elif ([($l.omp // {}) | keys[] | select(. != "modelRoles")] | length) > 0 then "omp keys must be modelRoles"
+      elif (($l.omp // {}) | has("modelRoles")) and ($l.omp.modelRoles | type) != "object" then "omp.modelRoles must be an object"
+      elif ([($l.omp.modelRoles // {}) | to_entries[] | select((.key == "cheap" or .key == "mid" or .key == "high") and (.value | type) != "string")] | length) > 0 then
+        "omp.modelRoles cheap, mid, and high must be strings"
+      elif ($l | has("firstmate")) and ($l.firstmate | type) != "object" then "firstmate must be an object"
+      elif ([($l.firstmate // {}) | keys[] | select(. != "use" and . != "rules" and . != "default")] | length) > 0 then
+        "firstmate keys must be use, rules, or default"
+      elif (($l.firstmate // {}) | has("use")) and ($l.firstmate.use | type) != "object" then "firstmate.use must be an object keyed by tier"
+      elif ([($l.firstmate.use // {}) | keys[] | select(. as $t | $tiers | index($t) | not)] | length) > 0 then
+        "firstmate.use tiers must be among: \($tiers | join(", "))"
+      elif ([($l.firstmate.use // {})[] | select(type != "array")] | length) > 0 then "firstmate.use.<tier> must be an array of profiles"
+      elif (($l.firstmate // {}) | has("rules")) and ($l.firstmate.rules | type) != "array" then "firstmate.rules must be an array of rules"
+      elif (($l.firstmate // {}) | has("default")) and ($l.firstmate.default | type) != "array" then "firstmate.default must be an array of profiles"
+      elif ([($l.firstmate.use // {})[][] | select(profile_bad)] | length) > 0 then "each firstmate.use.<tier> profile must be an object with a non-empty harness; model and effort non-empty when present; provider matching ^[a-z0-9]+(-[a-z0-9]+)*$ when present; omp lanes need a provider and an effort among low, medium, high, xhigh, max, auto"
+      elif ([($l.firstmate.default // [])[] | select(profile_bad)] | length) > 0 then "each firstmate.default profile must be an object with a non-empty harness; model and effort non-empty when present; provider matching ^[a-z0-9]+(-[a-z0-9]+)*$ when present; omp lanes need a provider and an effort among low, medium, high, xhigh, max, auto"
+      elif ([($l.firstmate.rules // [])[] | select(rule_bad)] | length) > 0 then
+        "each firstmate.rules entry must be an object with a non-empty when, a non-empty use array of valid profiles with no repeated harness, model, effort, and select quota-balanced when present"
+      else empty
+      end')
+  [ -z "$err" ] || { echo "$LOCAL_FILE: $err" >&2; exit 2; }
+}
+
+omp_get() { # <key>: current value as JSON, null when unset
+  local cur
+  cur=$(omp config get "$1" --json 2>/dev/null | jq -c '.value' 2>/dev/null) || cur=null
+  [ -n "$cur" ] || cur=null
+  printf '%s' "$cur"
+}
+
+fm_ready() { # $FM_HOME is a Firstmate checkout that accepts omp auto effort (nissan/firstmate#52)
+  { [ -d "$FM_HOME/.git" ] || [ -f "$FM_HOME/.git" ]; } && grep -qF '"xhigh","max","auto"' "$FM_HOME/bin/fm-bootstrap.sh" 2>/dev/null
+}
+
+# Record kit-owned values only, after the corresponding surface has applied.
+save_baseline() { # <source> <jq filter> <destination>
+  [ "$MODE" = apply ] || return 0
+  local value previous
+  value=$(jq -cS "$2" "$1")
+  previous=$(jq -cS . "$3" 2>/dev/null) || previous=''
+  [ "$value" = "$previous" ] && return 0
+  backup "$3"
+  mkdir -p "$(dirname "$3")"
+  printf '%s\n' "$value" >"$3.tmp.$$"
+  mv "$3.tmp.$$" "$3"
+}
+
+baseline_match() { # <baseline> <jq filter> <current JSON>
+  local previous
+  previous=$(jq -cS "$2" "$1" 2>/dev/null) || return 1
+  [ "$previous" = "$3" ]
+}
+
+# Recognize an unmodified managed value from this kit's own committed history.
+# Without a matching historical value, retain the migration guard.
+historical_kit_match() { # <path> <jq filter> <current JSON>
+  local top commit previous
+  have git || return 1
+  top=$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null) || return 1
+  [ "$top" = "$(cd "$ROOT" && pwd -P)" ] || return 1
+  while IFS= read -r commit; do
+    previous=$(git -C "$ROOT" show "$commit:$1" 2>/dev/null | jq -cS "$2" 2>/dev/null) || continue
+    [ "$previous" = "$3" ] && return 0
+  done < <(git -C "$ROOT" log --format=%H -- "$1" 2>/dev/null)
+  return 1
+}
+
+applied_kit_match() { # <baseline record> <record jq filter> <kit path> <kit jq filter> <current JSON>
+  if [ -e "$1" ]; then
+    baseline_match "$1" "$2" "$5"
+  else
+    historical_kit_match "$3" "$4" "$5"
+  fi
+}
+
+undeclared_entries() { # one line per machine-local difference the kit does not define
+  if have omp; then
+    local current tier value extra omp_dir
+    current=$(omp_get modelRoles)
+    omp_dir=$(omp config path)
+    for tier in cheap mid high; do
+      value=$(jq -cS --arg t "$tier" '.[$t]' <<<"$current")
+      extra=$(jq -rn --argjson c "$value" --arg t "$tier" --slurpfile k "$ROOT/omp/settings.json" "$JQ_ITEMS"'
+        $k[0].modelRoles[$t] as $w
+        | if ($c | type) == "string" and ($w | type) == "string" then
+            (($c | items) - ($w | items)) | join(", ")
+          else "" end')
+      [ -n "$extra" ] || continue
+      applied_kit_match "$omp_dir/.reddidotagents-model-roles.json" "$JQ_ITEMS .$tier | items" \
+        omp/settings.json "$JQ_ITEMS .modelRoles.$tier | items" "$(jq -c "$JQ_ITEMS items" <<<"$value")" && continue
+      printf 'omp modelRoles %s: %s\n' "$tier" "$extra"
+    done
+  fi
+  fm_ready && [ -f "$FM_HOME/config/crew-dispatch.json" ] || return 0
+  local dispatch
+  dispatch=$(jq -cS . "$FM_HOME/config/crew-dispatch.json" 2>/dev/null) || dispatch=''
+  if [ "$dispatch" != "$(jq -cS . "$ROOT/firstmate/crew-dispatch.json")" ] &&
+     ! applied_kit_match "$FM_HOME/config/.reddidotagents-crew-dispatch.json" . firstmate/crew-dispatch.json . "$dispatch"; then
+    printf 'firstmate config/crew-dispatch.json differs from the kit baseline firstmate/crew-dispatch.json (compare the two files; lanes and rules you want to keep go in local.json)\n'
+  fi
+}
+
+local_guard() { # without local.json, stop on entries the kit does not define instead of dropping them
+  [ "$HAVE_LOCAL" = 0 ] || return 0
+  local entries line
+  entries=$(undeclared_entries)
+  [ -n "$entries" ] || return 0
+  GUARDED=1
+  section "machine-local entries"
+  while IFS= read -r line; do missing "$line"; done <<<"$entries"
+  printf '  These are neither in the kit nor declared in %s.\n' "$LOCAL_FILE"
+  printf '  Keep lanes and rules: declare them in that file (README, "Machine-local additions").\n'
+  printf '  Accept the kit as is: create that file containing only {}.\n'
+  [ "$MODE" = apply ] || return 0
+  printf '\nNothing was changed.\n'
+  exit 2
 }
 
 sync_file() { # <src> <dest> <label>
@@ -114,10 +266,27 @@ sync_omp() {
   dir=$(omp config path)
   for key in $(jq -r 'keys[]' "$ROOT/omp/settings.json"); do
     want=$(jq -c --arg k "$key" '.[$k]' "$ROOT/omp/settings.json")
-    cur=$(omp config get "$key" --json 2>/dev/null | jq -c '.value' 2>/dev/null) || cur=null
-    [ -n "$cur" ] || cur=null
-    merged=$(jq -cn --argjson c "$cur" --argjson w "$want" \
-      'if ($w | type) == "object" then (if ($c | type) == "object" then $c else {} end) * $w else $w end')
+    cur=$(omp_get "$key")
+    merged=$(jq -cn --arg k "$key" --argjson c "$cur" --argjson w "$want" --argjson l "$(jq -c --arg k "$key" 'if $k == "modelRoles" then .omp.modelRoles // {} else {} end' <<<"$LOCAL")" "$JQ_ITEMS"'
+      if ($w | type) == "object" then
+        (if ($c | type) == "object" then $c else {} end) as $co
+        | ($co * $l * $w) as $base
+        | if $k == "modelRoles" then
+            reduce ("cheap", "mid", "high") as $t ($base;
+              if ($w[$t] | type) == "string" then
+                ($w[$t] | items) as $wi
+                | (if ($l[$t] | type) == "string" then ($l[$t] | items) else [] end) as $li
+                | .[$t] = (($wi + ($li - $wi)) | join(", "))
+              else
+                .
+              end
+            )
+          else
+            $base
+          end
+      else
+        $w
+      end')
     if [ "$(jq -cS . <<<"$merged")" = "$(jq -cS . <<<"$cur")" ]; then ok "config $key"; continue; fi
     drift "config $key"
     [ "$MODE" = apply ] || continue
@@ -126,6 +295,7 @@ sync_omp() {
     omp config set "$key" "$arg" >/dev/null
     wrote "config $key"
   done
+  save_baseline "$ROOT/omp/settings.json" .modelRoles "$dir/.reddidotagents-model-roles.json"
   sync_file "$ROOT/omp/extensions/provider-balancer.ts" "$dir/extensions/provider-balancer.ts" "extension provider-balancer.ts"
   managed_block "$ROOT/shared/fleet-rules.md" "$dir/AGENTS.md" "fleet rules in AGENTS.md"
 }
@@ -161,11 +331,35 @@ sync_firstmate() {
   fi
   # The profile names omp roles with effort "auto"; Firstmate before nissan/firstmate#52
   # rejects that, and an invalid dispatch file disables every rule, so never install it there.
-  if ! grep -qF '"xhigh","max","auto"' "$FM_HOME/bin/fm-bootstrap.sh" 2>/dev/null; then
+  if ! fm_ready; then
     missing "config/crew-dispatch.json: $FM_HOME predates omp auto effort (needs nissan/firstmate#52); update it, then rerun"
     return 0
   fi
-  sync_file "$ROOT/firstmate/crew-dispatch.json" "$FM_HOME/config/crew-dispatch.json" "config/crew-dispatch.json"
+  local file="$FM_HOME/config/crew-dispatch.json" cur='{}' merged
+  if [ -f "$file" ]; then
+    cur=$(jq -c . "$file" 2>/dev/null) || cur='{}'
+  fi
+  merged=$(jq -cn --argjson l "$(jq -c '.firstmate // {}' <<<"$LOCAL")" --slurpfile w "$ROOT/firstmate/crew-dispatch.json" '
+    def profile_id: [.harness, (.model // null), (.effort // null)];
+    def first_per_profile: reduce .[] as $p ([]; if any(.[]; profile_id == ($p | profile_id)) then . else . + [$p] end);
+    $w[0] as $kit
+    | ($l.use // {}) as $use
+    | $kit * {
+        rules: ([$kit.rules[] | .use = ((.use + ($use[.tier // ""] // [])) | first_per_profile)] + ($l.rules // [])),
+        default: (($kit.default + ($l.default // [])) | first_per_profile)
+      }')
+  if [ -f "$file" ] && [ "$(jq -cS . <<<"$merged")" = "$(jq -cS . <<<"$cur")" ]; then
+    ok "config/crew-dispatch.json"
+    save_baseline "$ROOT/firstmate/crew-dispatch.json" . "$FM_HOME/config/.reddidotagents-crew-dispatch.json"
+    return 0
+  fi
+  drift "config/crew-dispatch.json ($file)"
+  [ "$MODE" = apply ] || return 0
+  backup "$file"
+  mkdir -p "$(dirname "$file")"
+  jq . <<<"$merged" >"$file"
+  wrote "$file"
+  save_baseline "$ROOT/firstmate/crew-dispatch.json" . "$FM_HOME/config/.reddidotagents-crew-dispatch.json"
 }
 
 sync_npm() {
@@ -208,6 +402,8 @@ sync_herdr() {
 
 if ! have jq; then echo "jq is required (install it, then rerun)" >&2; exit 2; fi
 printf 'ReddiDotAgents %s (%s)\n' "$MODE" "$ROOT"
+load_local
+local_guard
 sync_omp
 sync_pi
 sync_firstmate
@@ -225,5 +421,9 @@ if [ "$DRIFT" = 0 ] && [ "$MISSING" = 0 ]; then
   printf 'In sync.\n'
   exit 0
 fi
-printf 'Drift found. Review it, then run scripts/sync.sh --apply.\n'
+if [ "$GUARDED" = 1 ]; then
+  printf 'Drift found. scripts/sync.sh --apply will stop until the machine-local entries above are declared in %s or that file exists with only {}.\n' "$LOCAL_FILE"
+else
+  printf 'Drift found. Review it, then run scripts/sync.sh --apply.\n'
+fi
 exit 1
