@@ -45,11 +45,11 @@ new_machine() { # <dir>: empty omp config, Firstmate home that accepts auto effo
   printf '%s\n' 'EFFORTS=("low","medium","high","xhigh","max","auto")' >"$1/fm/bin/fm-bootstrap.sh"
 }
 
-run_sync() { # <kit> <machine> <mode>: output in $OUT, exit status in $RC; local.json is read from <kit>
+run_sync() { # <kit> <machine> <mode> [options]: output in $OUT, exit status in $RC; local.json is read from <kit>
   RC=0
   PATH="$S/bin:$PATH" FAKE_OMP_DIR="$2/omp" REDDIDOTAGENTS_PI_DIR="$2/pi" \
     REDDIDOTAGENTS_BACKUP_DIR="$2/bak" \
-    "$1/scripts/sync.sh" "$3" --skip-npm --skip-herdr --skip-pi --firstmate-home "$2/fm" >"$S/out" 2>&1 || RC=$?
+    "$1/scripts/sync.sh" "${@:3}" --skip-npm --skip-herdr --skip-pi --firstmate-home "$2/fm" >"$S/out" 2>&1 || RC=$?
   OUT=$(cat "$S/out")
 }
 
@@ -261,6 +261,21 @@ for bad in \
   check "Firstmate would reject it, so the sync does: $bad" 2 "$RC"
 done
 check "no dispatch file was written by any rejected overlay" "absent" "$([ -e "$M6/fm/config/crew-dispatch.json" ] && echo present || echo absent)"
+
+# --- 7. The cursor dispatch profile goes through the same overlay and guard, with tiers taken from the selected kit file.
+K7="$S/k7"; M7="$S/m7"; new_kit "$K7"; new_machine "$M7"
+printf '%s\n' '{"omp": {"modelRoles": {"frontier": "@frontier_local", "frontier_local": "local/big"}}, "firstmate": {"use": {"frontier": [{"harness": "omp", "model": "@frontier_local", "provider": "local"}]}}}' >"$K7/local.json"
+run_sync "$K7" "$M7" --apply --dispatch cursor
+check "cursor profile apply exits 0" 0 "$RC"
+check "cursor profile installs the cursor kit's default lanes" "$(jq -c .default "$ROOT/firstmate/crew-dispatch.cursor.json")" "$(dispatch .default "$M7")"
+check "local frontier lane joins the cursor kit's frontier rule" '["@frontier_cursor","@frontier_local"]' "$(dispatch '.rules[] | select(.tier == "frontier") | .use | map(.model)' "$M7")"
+check "omp frontier = kit lanes then local lane" "@frontier_claude, @frontier_gpt, @frontier_local" "$(roles frontier "$M7")"
+run_sync "$K7" "$M7" --check --dispatch cursor
+check "cursor profile machine is in sync after apply" "In sync." "$(tail -n1 <<<"$OUT")"
+rm "$K7/local.json"
+run_sync "$K7" "$M7" --check --dispatch cursor
+check "without local.json the guard names the cursor baseline" 1 "$(grep -c 'differs from the kit baseline firstmate/crew-dispatch.cursor.json' <<<"$OUT")"
+check "without local.json the guard names the undeclared frontier role" 1 "$(grep -c 'MISSING omp modelRoles frontier: @frontier_local' <<<"$OUT")"
 
 printf '\n%d checks, %d failed\n' "$CASES" "$FAILS"
 [ "$FAILS" = 0 ]
