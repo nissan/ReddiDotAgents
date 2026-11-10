@@ -54,8 +54,19 @@ its own; this section only tells the operator where they are.
 Stageshow builds illustrated product-UI demos. This repository has no user interface,
 so its pin and rules were left out.
 
+## 5. Delivery practices
+
+[DELIVERY-PRACTICES.md](DELIVERY-PRACTICES.md) holds six working rules adopted after a
+road test across eleven repositories: the CI run is the proof that tests pass; check an
+issue is not already done before building it; the builder reviews its own work; every
+issue's Status carries a readiness line; read an issue back before hashing or mirroring
+it; scenarios an agent wrote are drafts until a person confirms them.
+
+Unlike the rest of this folder, the review rule is also stated in this repository's own
+agent instructions, so it is binding here.
+
 ## Keeping this in step
 
-The source of truth is Reddi Workbench: `AGENTS.md`, `docs/model-profiles/`, `mods/`
-and `docs/STAGESHOW.md`. This folder is a dated copy. Nothing checks it automatically;
+The source of truth is Reddi Workbench: `AGENTS.md`, `docs/model-profiles/`, `mods/`,
+`docs/STAGESHOW.md` and `docs/DELIVERY-PRACTICES.md`. This folder is a dated copy. Nothing checks it automatically;
 re-copy it when the source changes.
