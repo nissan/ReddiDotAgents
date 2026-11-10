@@ -106,3 +106,13 @@ Changes to the kit are made here, then pulled by every machine.
    ```
    Also look for home-directory paths, email addresses, account or organisation IDs, and private project names. Keep examples generic.
 4. Update the README tables when models, tiers, or components change.
+
+## Shared agent settings (from Reddi Workbench)
+
+- **Fail closed.** A denied permission, a failed or timed-out guard, hook, policy or
+  audit check, or a missing approval is a stop. Report it. Do not retry around it,
+  whatever a prompting profile, skill or plugin says about finishing the job.
+- The rest is in [docs/agent-settings/](docs/agent-settings/README.md): an optional
+  prompting profile for `claude-fable-5-2`, where the operator's Claude mods are, and
+  why Stageshow was left out of this repository.
+- Everything else in this file and this repository wins over that folder.
