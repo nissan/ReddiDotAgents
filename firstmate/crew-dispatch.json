@@ -1,7 +1,7 @@
 {
   "rules": [
     {
-      "when": "Task-intake analysis determines that the work is clearly small, low-risk, routine, or mechanical, and a fast low-cost model can complete it without compromising the task.",
+      "when": "Task-intake analysis determines side work that is clearly small, low-risk, routine, or mechanical (searching, reading logs, running tests), and a fast low-cost model can complete it without compromising the task.",
       "use": [
         { "harness": "omp", "model": "@cheap_gpt", "provider": "codex", "effort": "auto" },
         { "harness": "omp", "model": "@cheap_claude", "provider": "claude", "effort": "auto" },
@@ -11,7 +11,7 @@
       "why": "Cheapest current tier: GPT-6 Luna, Claude Haiku 5.5, Gemini 3.8 Flash (omp roles in ~/.omp/agent/config.yml). Quota decides the family; omp's auto classifier sets effort."
     },
     {
-      "when": "Task-intake analysis determines ordinary engineering work of moderate scope: implementation, fixes, or investigation with a clear path and clear acceptance evidence.",
+      "when": "Task-intake analysis determines a clear, scoped fix or change of moderate size: the path and the acceptance evidence are both already clear.",
       "use": [
         { "harness": "omp", "model": "@mid_gpt", "provider": "codex", "effort": "auto" },
         { "harness": "omp", "model": "@mid_claude", "provider": "claude", "effort": "auto" },
@@ -22,7 +22,7 @@
       "why": "Mid tier: GPT-6.1 Terra, Claude Sonnet 5.5, Gemini 3.8 Flash, Antigravity Claude Sonnet 5.5."
     },
     {
-      "when": "Task-intake analysis determines high complexity, uncertainty, or blast radius: cross-cutting design, security, concurrency, release-critical changes, independent exact-head reviews, or ambiguous investigation.",
+      "when": "Task-intake analysis determines high complexity, uncertainty, or blast radius in a bounded task: cross-cutting design, security, concurrency, release-critical changes, or a review the owner asked for.",
       "use": [
         { "harness": "omp", "model": "@high_gpt", "provider": "codex", "effort": "auto" },
         { "harness": "omp", "model": "@high_claude", "provider": "claude", "effort": "auto" },
@@ -30,13 +30,22 @@
         { "harness": "omp", "model": "@high_agclaude", "provider": "agy", "effort": "auto" }
       ],
       "select": "quota-balanced",
-      "why": "Frontier tier at cheapest sufficient cost: GPT-6.1 Sol, Claude Opus 5.5, Gemini 4 Argon, Antigravity Claude Opus 5.5. Fable/Mythos 5.1 and GPT-6 Astra (10/50 per Mtok) stay captain-explicit."
+      "why": "High tier: GPT-6.1 Sol, Claude Opus 5.5, Gemini 4 Argon, Antigravity Claude Opus 5.5."
+    },
+    {
+      "when": "Task-intake analysis determines a big, ambiguous job expected to run for hours: the goal is clear but the path is not, and the work spans many files, systems, or decisions.",
+      "use": [
+        { "harness": "omp", "model": "@frontier_claude", "provider": "claude", "effort": "high" },
+        { "harness": "omp", "model": "@frontier_gpt", "provider": "codex", "effort": "high" }
+      ],
+      "select": "quota-balanced",
+      "why": "Frontier tier: Claude Fable 5.2 or GPT-6 Astra, whichever subscription has quota, at high effort for the long run (owner direction, 11 November 2026). Plan the job at medium effort before dispatching it."
     }
   ],
   "default": [
-    { "harness": "omp", "model": "@mid_gpt", "provider": "codex", "effort": "auto" },
-    { "harness": "omp", "model": "@mid_claude", "provider": "claude", "effort": "auto" },
-    { "harness": "omp", "model": "@mid_gemini", "provider": "agy", "effort": "auto" },
-    { "harness": "omp", "model": "@mid_agclaude", "provider": "agy", "effort": "auto" }
+    { "harness": "omp", "model": "@high_gpt", "provider": "codex", "effort": "medium" },
+    { "harness": "omp", "model": "@high_claude", "provider": "claude", "effort": "medium" },
+    { "harness": "omp", "model": "@high_gemini", "provider": "agy", "effort": "medium" },
+    { "harness": "omp", "model": "@high_agclaude", "provider": "agy", "effort": "medium" }
   ]
 }

@@ -7,25 +7,37 @@ This repository holds only configuration and a sync script. The tools themselves
 
 ## What you get
 
-**Complexity tiers across three subscriptions.** Each tier pairs the newest model of each family at a similar price point:
+**Tiers by kind of work, across three subscriptions.** Each tier pairs the newest model of each family at a similar price point:
 
 | Tier | Used by | Claude | ChatGPT (Codex) | Antigravity Gemini | Antigravity Claude |
 |---|---|---|---|---|---|
 | `cheap` | `scout`, `sonic` subagents; small crew tasks | Haiku 5.5 | GPT-6 Luna | Gemini 3.8 Flash | none |
 | `mid` | `task` subagents, eval `agent()`/`workpool()`; ordinary crew work | Sonnet 5.5 | GPT-6.1 Terra | Gemini 3.8 Flash | Sonnet 5.5 |
-| `high` | `reviewer`, `security-reviewer`; high-risk crew work | Opus 5.5 | GPT-6.1 Sol | Gemini 4 Argon | Opus 5.5 |
+| `high` | Everyday crew work and anything unclear (the default, at medium effort); `reviewer`, `security-reviewer`; high-risk work | Opus 5.5 | GPT-6.1 Sol | Gemini 4 Argon | Opus 5.5 |
+| `frontier` | Big, ambiguous jobs expected to run for hours; planned at medium effort, run at high | Fable 5.2 | GPT-6 Astra | none | none |
 
-Frontier models (Claude Fable/Mythos 5.1, GPT-6 Astra) stay out of the automatic tiers; ask for them explicitly.
+The `mid` tier is for a clear, scoped fix and `cheap` for side jobs (search, logs, tests). The frontier tier uses whichever of Fable 5.2 and Astra has quota.
+
+**Cursor and Grok.** A session running in Cursor or Grok uses the Cursor subscription's own tiers. Grok models are reached through Cursor, not a separate xAI login:
+
+| Tier | Cursor | Grok through Cursor |
+|---|---|---|
+| `cheap` | Composer 2.5 | Grok Code Fast 1 |
+| `mid` | Claude Sonnet 5 (medium) | Grok 4.6 |
+| `high` | Claude Opus 5.5 | Grok 4.7 |
+| `frontier` | Claude Fable 5.1 (high) | none |
+
+These roles are named explicitly (`@high_cursor`, `@mid_grok`, ...); the quota balancer does not rotate into them. For Firstmate, `scripts/sync.sh --dispatch cursor` installs [`firstmate/crew-dispatch.cursor.json`](firstmate/crew-dispatch.cursor.json) into a home whose primary runs in Cursor or Grok. The model ids come from omp's bundled catalogue and have not been checked against a logged-in Cursor account; run `omp login cursor` and confirm them with omp's model list before relying on them.
 
 **Quota-aware balancing.** [`omp/extensions/provider-balancer.ts`](omp/extensions/provider-balancer.ts) picks a provider for every subagent spawn. It reads `omp usage --json` and favours the subscription furthest below its expected pace in its current quota window, interleaving spawns by weighted round-robin. The remaining providers become the child's automatic fallbacks.
 
-**Automatic reasoning effort.** Every tier model carries omp's `:auto` effort, so a small judge model rates each task and picks the lowest sufficient level.
+**Reasoning effort.** The cheap, mid and high tier models carry omp's `:auto` effort, so a small judge model rates each task and picks the lowest sufficient level. The frontier roles are pinned to high, and Firstmate's default dispatch asks for medium.
 
 **Session defaults.** A plain `omp` session runs GPT-6.1 Sol with `auto` effort and falls back to Claude Opus 5.5 if OpenAI is unavailable.
 
-**Fleet rules.** [`shared/fleet-rules.md`](shared/fleet-rules.md) is installed into the global instructions of both omp and Pi. It sets a five-active-agents-per-provider-family cap, cheapest-sufficient-model selection, stall redirection, local-first CI, and two-reviewer exact-head automerge.
+**Fleet rules.** [`shared/fleet-rules.md`](shared/fleet-rules.md) is installed into the global instructions of both omp and Pi. It sets a five-active-agents-per-provider-family cap, tier selection by kind of work, stall redirection, local-first CI, and builder self-review before merge.
 
-**Firstmate crew dispatch.** [`firstmate/crew-dispatch.json`](firstmate/crew-dispatch.json) routes Firstmate crew tasks to the same omp tiers, ranked by Firstmate's own quota snapshot, with `auto` effort.
+**Firstmate crew dispatch.** [`firstmate/crew-dispatch.json`](firstmate/crew-dispatch.json) routes Firstmate crew tasks to the same omp tiers, ranked by Firstmate's own quota snapshot. Unmatched work goes to the high tier at medium effort.
 
 **Firstmate harness changes.** The [nissan/firstmate](https://github.com/nissan/firstmate) fork carries the harness support this kit relies on:
 - [#52](https://github.com/nissan/firstmate/pull/52): an omp primary's built-in delegation (the `task` tool and eval `agent()`/`workpool()`) is refused in favour of fleet dispatch. Firstmate accepts omp model roles and `auto` effort for omp crew, keeps `auto` through relaunch, and refuses it for other harnesses.
@@ -96,7 +108,7 @@ scripts/sync.sh --apply --upgrade-npm   # also update the npm tools to @latest
 - **omp** (`~/.omp/agent/config.yml`): only the keys in [`omp/settings.json`](omp/settings.json) are managed. Record values such as `modelRoles` are merged key by key, so your own roles survive and the kit's roles win. omp rewrites the file when settings change, so YAML comments are not preserved; the pre-change file is kept in the backup.
 - **Pi** (`~/.pi/agent/settings.json`): deep-merged with [`pi/settings.json`](pi/settings.json). Other keys stay.
 - **Instructions** (`AGENTS.md` in each harness's agent directory): the fleet rules live between `reddidotagents:begin` and `reddidotagents:end` markers. Text outside the markers is yours and is never changed.
-- **Whole files**: `provider-balancer.ts` and Firstmate's `config/crew-dispatch.json`.
+- **Whole files**: `provider-balancer.ts` and Firstmate's `config/crew-dispatch.json` (from `crew-dispatch.json`, or `crew-dispatch.cursor.json` with `--dispatch cursor`).
 - **Backups**: every changed file is copied to `~/.reddidotagents-backups/<timestamp>/` first.
 - **Never touched**: logins, tokens, auth stores, sessions, and anything else in the agent directories.
 
@@ -128,6 +140,7 @@ omp/settings.json                 managed omp config keys (roles, tiers, effort,
 omp/extensions/provider-balancer.ts  quota-aware provider choice for subagent spawns
 pi/settings.json                  managed Pi defaults
 firstmate/crew-dispatch.json      Firstmate crew dispatch profiles using omp roles
+firstmate/crew-dispatch.cursor.json  the same, for a home whose primary runs in Cursor or Grok
 npm-globals.txt                   npm CLI tools to install globally
 scripts/sync.sh                   check / apply the kit on this machine
 ```

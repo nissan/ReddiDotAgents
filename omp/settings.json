@@ -7,6 +7,7 @@
     "cheap": "@cheap_claude, @cheap_gpt, @cheap_gemini",
     "mid": "@mid_claude, @mid_gpt, @mid_gemini, @mid_agclaude",
     "high": "@high_claude, @high_gpt, @high_gemini, @high_agclaude",
+    "frontier": "@frontier_claude, @frontier_gpt",
     "cheap_claude": "anthropic/claude-haiku-5-5:auto",
     "cheap_gpt": "openai-codex/gpt-6-luna:auto",
     "cheap_gemini": "google-antigravity/gemini-3.8-flash:auto",
@@ -18,6 +19,15 @@
     "high_gpt": "openai-codex/gpt-6.1-sol:auto",
     "high_gemini": "google-antigravity/gemini-4-argon:auto",
     "high_agclaude": "google-antigravity/claude-opus-5-5:auto",
+    "frontier_claude": "anthropic/claude-fable-5-2:high",
+    "frontier_gpt": "openai-codex/gpt-6-astra:high",
+    "cheap_cursor": "cursor/composer-2.5",
+    "mid_cursor": "cursor/claude-sonnet-5-medium",
+    "high_cursor": "cursor/claude-opus-5-5",
+    "frontier_cursor": "cursor/claude-fable-5-1-high",
+    "cheap_grok": "cursor/grok-code-fast-1",
+    "mid_grok": "cursor/cursor-grok-4.6",
+    "high_grok": "cursor/grok-4.7",
     "judge": "openai-codex/gpt-6-luna"
   },
   "task.agentModelOverrides": {

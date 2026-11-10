@@ -1,0 +1,43 @@
+{
+  "rules": [
+    {
+      "when": "Task-intake analysis determines side work that is clearly small, low-risk, routine, or mechanical (searching, reading logs, running tests), and a fast low-cost model can complete it without compromising the task.",
+      "use": [
+        { "harness": "omp", "model": "@cheap_cursor", "provider": "cursor" },
+        { "harness": "omp", "model": "@cheap_grok", "provider": "cursor" }
+      ],
+      "select": "quota-balanced",
+      "why": "Cheapest Cursor-subscription tier: Composer 2.5 or Grok Code Fast 1."
+    },
+    {
+      "when": "Task-intake analysis determines a clear, scoped fix or change of moderate size: the path and the acceptance evidence are both already clear.",
+      "use": [
+        { "harness": "omp", "model": "@mid_cursor", "provider": "cursor" },
+        { "harness": "omp", "model": "@mid_grok", "provider": "cursor" }
+      ],
+      "select": "quota-balanced",
+      "why": "Mid Cursor-subscription tier: Claude Sonnet 5 (medium) or Grok 4.6."
+    },
+    {
+      "when": "Task-intake analysis determines high complexity, uncertainty, or blast radius in a bounded task: cross-cutting design, security, concurrency, release-critical changes, or a review the owner asked for.",
+      "use": [
+        { "harness": "omp", "model": "@high_cursor", "provider": "cursor" },
+        { "harness": "omp", "model": "@high_grok", "provider": "cursor" }
+      ],
+      "select": "quota-balanced",
+      "why": "High Cursor-subscription tier: Claude Opus 5.5 or Grok 4.7."
+    },
+    {
+      "when": "Task-intake analysis determines a big, ambiguous job expected to run for hours: the goal is clear but the path is not, and the work spans many files, systems, or decisions.",
+      "use": [
+        { "harness": "omp", "model": "@frontier_cursor", "provider": "cursor" }
+      ],
+      "select": "quota-balanced",
+      "why": "Frontier through Cursor: Claude Fable 5.1 at high effort. Cursor lists no Fable 5.2 or GPT-6 Astra."
+    }
+  ],
+  "default": [
+    { "harness": "omp", "model": "@high_cursor", "provider": "cursor" },
+    { "harness": "omp", "model": "@high_grok", "provider": "cursor" }
+  ]
+}
