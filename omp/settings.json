@@ -22,10 +22,10 @@
     "frontier_claude": "anthropic/claude-fable-5-2:high",
     "frontier_gpt": "openai-codex/gpt-6-astra:high",
     "cheap_cursor": "cursor/composer-2.5",
-    "mid_cursor": "cursor/claude-sonnet-5-medium",
+    "mid_cursor": "cursor/claude-sonnet-5-5",
     "high_cursor": "cursor/claude-opus-5-5",
-    "frontier_cursor": "cursor/claude-fable-5-1-high",
-    "cheap_grok": "cursor/grok-code-fast-1",
+    "frontier_cursor": "cursor/claude-fable-5-2:high",
+    "cheap_grok": "cursor/cursor-grok-4.5-fast",
     "mid_grok": "cursor/cursor-grok-4.6",
     "high_grok": "cursor/grok-4.7",
     "judge": "openai-codex/gpt-6-luna"
