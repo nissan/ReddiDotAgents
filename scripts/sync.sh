@@ -24,6 +24,9 @@ Usage: scripts/sync.sh [--check | --apply] [options]
   --check                 Report drift only (default). Exit 1 on drift.
   --apply                 Apply the kit, backing up every changed file first.
   --firstmate-home DIR    Firstmate home (default: $FIRSTMATE_HOME or ~/firstmate).
+  --dispatch NAME         Crew dispatch profile: "default" (Claude, ChatGPT, Antigravity)
+                          or "cursor" (Cursor subscription, including Grok through
+                          Cursor) for a home whose primary runs in Cursor or Grok.
   --upgrade-npm           With --apply, also reinstall listed npm tools at @latest.
   --skip-npm              Do not check or install npm global tools.
   --skip-herdr            Do not check or install herdr integrations.
@@ -39,11 +42,13 @@ EOF
 MODE=check
 FM_HOME=${FIRSTMATE_HOME:-$HOME/firstmate}
 DO_NPM=1 DO_HERDR=1 DO_PI=1 UPGRADE_NPM=0
+DISPATCH=default
 while [ $# -gt 0 ]; do
   case "$1" in
   --check) MODE=check ;;
   --apply) MODE=apply ;;
   --firstmate-home) FM_HOME=${2:?--firstmate-home needs a directory}; shift ;;
+  --dispatch) DISPATCH=${2:?--dispatch needs a profile name}; shift ;;
   --upgrade-npm) UPGRADE_NPM=1 ;;
   --skip-npm) DO_NPM=0 ;;
   --skip-herdr) DO_HERDR=0 ;;
@@ -55,6 +60,11 @@ while [ $# -gt 0 ]; do
 done
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+case "$DISPATCH" in
+default) DISPATCH_FILE=$ROOT/firstmate/crew-dispatch.json ;;
+cursor) DISPATCH_FILE=$ROOT/firstmate/crew-dispatch.cursor.json ;;
+*) echo "unknown --dispatch profile: $DISPATCH (use default or cursor)" >&2; exit 2 ;;
+esac
 BACKUP_DIR=${REDDIDOTAGENTS_BACKUP_DIR:-$HOME/.reddidotagents-backups}/$(date +%Y%m%d-%H%M%S)
 BLOCK_BEGIN='<!-- reddidotagents:begin (managed by ReddiDotAgents; edit the ReddiDotAgents repo, not this block) -->'
 BLOCK_END='<!-- reddidotagents:end -->'
@@ -165,7 +175,7 @@ sync_firstmate() {
     missing "config/crew-dispatch.json: $FM_HOME predates omp auto effort (needs nissan/firstmate#52); update it, then rerun"
     return 0
   fi
-  sync_file "$ROOT/firstmate/crew-dispatch.json" "$FM_HOME/config/crew-dispatch.json" "config/crew-dispatch.json"
+  sync_file "$DISPATCH_FILE" "$FM_HOME/config/crew-dispatch.json" "config/crew-dispatch.json ($DISPATCH profile)"
 }
 
 sync_npm() {

@@ -48,7 +48,7 @@ scripts/sync.sh --apply
 scripts/sync.sh --check     # must print "In sync."
 ```
 
-Useful options: `--firstmate-home DIR` when Firstmate is not at `~/firstmate`, `--skip-pi` when Pi is not used, `--upgrade-npm` to refresh the npm tools to `@latest`, and `--skip-npm` / `--skip-herdr`. Every changed file is backed up under `~/.reddidotagents-backups/<timestamp>/`; report that path to the user.
+Useful options: `--firstmate-home DIR` when Firstmate is not at `~/firstmate`, `--dispatch cursor` for a Firstmate home whose primary runs in Cursor or Grok, `--skip-pi` when Pi is not used, `--upgrade-npm` to refresh the npm tools to `@latest`, and `--skip-npm` / `--skip-herdr`. Every changed file is backed up under `~/.reddidotagents-backups/<timestamp>/`; report that path to the user.
 
 ### 4. Provider logins (user action)
 
@@ -92,7 +92,7 @@ The fleet rules reach omp when a fresh session's instructions include the "Fleet
 
 Changes to the kit are made here, then pulled by every machine.
 
-1. Edit the kit files: `omp/settings.json`, `omp/extensions/`, `pi/settings.json`, `shared/fleet-rules.md`, `firstmate/crew-dispatch.json`, `npm-globals.txt`, or `scripts/sync.sh`.
+1. Edit the kit files: `omp/settings.json`, `omp/extensions/`, `pi/settings.json`, `shared/fleet-rules.md`, `firstmate/crew-dispatch.json`, `firstmate/crew-dispatch.cursor.json`, `npm-globals.txt`, or `scripts/sync.sh`.
 2. Test the script against throwaway directories, never the user's real ones:
    ```sh
    S=$(mktemp -d); mkdir -p "$S/omp" "$S/pi"

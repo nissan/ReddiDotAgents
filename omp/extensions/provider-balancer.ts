@@ -1,14 +1,15 @@
 // Balances subagent spawns across subscription quota lanes: Claude (anthropic), ChatGPT (openai-codex),
 // Antigravity Gemini, and Antigravity's Claude pool.
 //
-// Agents opt in through `task.agentModelOverrides` pointing at a tier role (`@cheap`, `@mid`, `@high`).
+// Agents opt in through `task.agentModelOverrides` pointing at a tier role (`@cheap`, `@mid`, `@high`), or a
+// spawn names `@frontier` (Claude Fable or GPT Astra, whichever subscription has quota).
 // Each tier has one concrete role per lane in `modelRoles` (`<tier>_<lane>`).
 // Spawns are distributed by smooth weighted round-robin; a lane's weight is how far it is under its
 // quota pace (remaining fraction / time-to-reset fraction, tightest window wins), read from
 // `omp usage --json`. The other lanes of the tier follow as the child's retry fallbacks.
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 
-type Tier = "cheap" | "mid" | "high";
+type Tier = "cheap" | "mid" | "high" | "frontier";
 
 interface UsageLimit {
 	id?: string;
@@ -30,13 +31,20 @@ interface Lane {
 	counts(limit: UsageLimit, tier: Tier): boolean;
 }
 
+/** The three complexity tiers every full lane serves; `frontier` is listed per lane. */
 const ALL_TIERS: readonly Tier[] = ["cheap", "mid", "high"];
-const TIERS: Record<string, Tier> = { cheap: "cheap", mid: "mid", high: "high" };
+const WITH_FRONTIER: readonly Tier[] = [...ALL_TIERS, "frontier"];
+const TIERS: Record<string, Tier> = { cheap: "cheap", mid: "mid", high: "high", frontier: "frontier" };
 
 const LANES: readonly Lane[] = [
-	// Model-tier windows (e.g. Fable-only) do not gate Haiku/Sonnet/Opus.
-	{ name: "claude", provider: "anthropic", tiers: ALL_TIERS, counts: l => !l.scope?.tier },
-	{ name: "gpt", provider: "openai-codex", tiers: ALL_TIERS, counts: () => true },
+	// Model-tier windows (e.g. Fable-only) do not gate Haiku/Sonnet/Opus; they do gate the frontier tier.
+	{
+		name: "claude",
+		provider: "anthropic",
+		tiers: WITH_FRONTIER,
+		counts: (l, tier) => tier === "frontier" || !l.scope?.tier,
+	},
+	{ name: "gpt", provider: "openai-codex", tiers: WITH_FRONTIER, counts: () => true },
 	// Gemini windows; the Argon-only window gates just the `high` tier's gemini-4-argon.
 	{
 		name: "gemini",
@@ -68,7 +76,7 @@ let reports: UsageReport[] | undefined;
 let fetchedAt = 0;
 let inflight: Promise<void> | undefined;
 let lastError: string | undefined;
-const swrrCurrent: Record<Tier, Record<string, number>> = { cheap: {}, mid: {}, high: {} };
+const swrrCurrent: Record<Tier, Record<string, number>> = { cheap: {}, mid: {}, high: {}, frontier: {} };
 
 function paceScore(limit: UsageLimit, now: number): number {
 	const remaining = limit.amount?.remainingFraction;
