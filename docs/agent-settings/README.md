@@ -56,14 +56,16 @@ so its pin and rules were left out.
 
 ## 5. Delivery practices
 
-[DELIVERY-PRACTICES.md](DELIVERY-PRACTICES.md) holds ten working rules adopted after two
+[DELIVERY-PRACTICES.md](DELIVERY-PRACTICES.md) holds twelve working rules adopted after three
 rounds of delivery across eleven repositories: the CI run is the proof that tests pass;
-check an issue is not already done before building it; the builder reviews its own work;
-every issue's Status carries a readiness line; read an issue back before hashing or
-mirroring it; scenarios an agent wrote are drafts until a person confirms them; a review
-follow-up goes on the pull request or is filed as blocked on it; each repository says
-what its checks need; a repository without hosted CI has one check command; the agent
-file says who builds and who reviews.
+check an issue is not already done, or already claimed by an open pull request, before
+building it; the builder reviews its own work; every issue's Status carries a readiness
+line; read an issue back before hashing or mirroring it; scenarios an agent wrote are
+drafts until a person confirms them; a review follow-up goes on the pull request or is
+filed as blocked on it; each repository says what its checks need; a repository without
+hosted CI has one check command; the agent file says who builds and who reviews; a pull
+request says which check covers its change; checks only the workstation can run go in
+one queue kept in Reddi Workbench.
 
 [CHECKS.md](CHECKS.md) is this repository's answer to the last three: who builds and who
 reviews here, the one check command, and what each check needs. It is rendered from

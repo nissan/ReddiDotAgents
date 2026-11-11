@@ -1,9 +1,9 @@
 # Delivery practices
 
-Ten working rules. Rules 1 to 6 were adopted on 11 November 2026 after one issue was taken
+Twelve working rules. Rules 1 to 6 were adopted on 11 November 2026 after one issue was taken
 through delivery in each of eleven repositories; rules 7 to 10 after a second round the
-same day. Each rule names the evidence behind it. This repository's own instructions (`AGENTS.md` or `CLAUDE.md`)
-are the contract; this page explains how to meet them. Copied from Reddi Workbench (`docs/DELIVERY-PRACTICES.md`, commit `2659ea8`).
+same day; rules 11 and 12, and additions to rules 2, 4 and 10, after a third. Each rule names the evidence behind it. This repository's own instructions (`AGENTS.md` or `CLAUDE.md`)
+are the contract; this page explains how to meet them. Copied from Reddi Workbench (`docs/DELIVERY-PRACTICES.md`, commit `03ece99`).
 
 ## 1. The CI run is the proof that tests pass
 
@@ -28,8 +28,13 @@ command run and its output. Do not rebuild it.
 When picking up a backlog after a gap, sweep the low-severity and follow-up issues this
 way first.
 
+Check for an open pull request too. An issue that an open pull request already names is
+taken: building it again makes a duplicate. `python3 scripts/triage.py check OWNER/REPO`
+lists every issue named by an open pull request whose readiness line does not say so.
+
 *Evidence: five of the eight issues chosen as "smallest" in two repositories were already
-fixed on main.*
+fixed on main. In the third round an issue was built a second time while its first pull
+request was still open, because the check looked only at the default branch.*
 
 ## 3. One review rule: the builder reviews its own work
 
@@ -62,9 +67,15 @@ The Status section of an issue carries one readiness line:
 Example: `Readiness: Needs tool (shared-brain recall).`
 
 `python3 scripts/triage.py check OWNER/REPO` in Reddi Workbench lists the open issues with no
-readiness line. `apply` writes `Draft` into each of them, or the line a decisions file
-gives, and leaves an issue that already has a line alone. `Draft` is the honest default:
-a script cannot know that a person has read the scenarios.
+readiness line. `apply` writes one into each: `Blocked (pull request N)` when an open pull
+request names the issue, `Needs owner (...)` when its Human gate asks something of the
+owner, and otherwise `Draft`, because a script cannot know that a person has read the
+scenarios. It leaves an issue that already has a line alone; `--refresh-drafts` re-evaluates
+only the lines that are still the default `Draft`. A decisions file gives the real line
+for issues somebody has looked at.
+
+A round can only "pick a Ready issue" where some are marked `Ready`. Before a round, the
+session shortlists a few candidates per repository and the owner confirms them.
 
 *Evidence: four repositories had no issue an agent session could start, and finding that
 out took a read of every open issue.*
@@ -130,6 +141,33 @@ reviews, with the detail in `CHECKS.md`. One issue built to completion per round
 the measure in a repository where the session only reviews, or where the next step is an
 owner decision: there the session's work is the review or the prepared decision.
 
+Where every open issue waits on the owner, the session's work for the round is to prepare
+those decisions: for each, the question, the options, what each option commits to, and a
+recommendation, in one place the owner can answer from.
+
 *Evidence: one repository is built by Codex with Claude reviewing only, and another's
 ready work was a visual audit awaiting the owner; treating both as "build one issue" gave
-nothing to build.*
+nothing to build. In the third round five of eleven repositories again had nothing a
+session could start.*
+
+## 11. The pull request says which check covers the change
+
+A pull request names the check that would fail if the change were wrong, and says whether
+that check ran and where. Green CI is evidence only for what it exercises. If no hosted
+check covers the change, say so in those words; do not let a green tick stand in for it.
+
+*Evidence: in the third round two pull requests had green CI that did not touch what they
+changed: a display string read only by a browser smoke, and a documented command that no
+workflow runs.*
+
+## 12. One queue for what the workstation must run
+
+When a pull request or issue stops on a check a cloud session cannot run, add the check to
+`planning/workstation-queue.json` in Reddi Workbench: the repository, the ref, the command,
+what to record and what it unblocks. `python3 scripts/workstation.py prompt` turns the
+whole queue into one task for the workstation agent. Remove an item when its result is
+recorded. The queue holds checks only; anything that changes the machine, such as applying
+settings, is a separate request the owner approves.
+
+*Evidence: by the end of the third round seven results were waiting on the workstation,
+asked for in four separate prompts.*
