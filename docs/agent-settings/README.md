@@ -56,19 +56,23 @@ so its pin and rules were left out.
 
 ## 5. Delivery practices
 
-[DELIVERY-PRACTICES.md](DELIVERY-PRACTICES.md) holds twelve working rules adopted after three
+[DELIVERY-PRACTICES.md](DELIVERY-PRACTICES.md) holds fifteen working rules adopted after four
 rounds of delivery across eleven repositories: the CI run is the proof that tests pass;
-check an issue is not already done, or already claimed by an open pull request, before
-building it; the builder reviews its own work; every issue's Status carries a readiness
-line; read an issue back before hashing or mirroring it; scenarios an agent wrote are
-drafts until a person confirms them; a review follow-up goes on the pull request or is
-filed as blocked on it; each repository says what its checks need; a repository without
-hosted CI has one check command; the agent file says who builds and who reviews; a pull
-request says which check covers its change; checks only the workstation can run go in
-one queue kept in Reddi Workbench.
+check an issue is not already done, already claimed by an open pull request, or waiting
+on code that only an open pull request holds, before building it; the builder reviews its
+own work; every issue's Status carries a readiness line, and `Ready` is written only after
+those pre-build checks; read an issue back before hashing or mirroring it; scenarios an
+agent wrote are drafts until a person confirms them; a review follow-up goes on the pull
+request or is filed as blocked on it; each repository says what its checks need; a
+repository without hosted CI has one check command; the agent file says who builds and who
+reviews; a pull request says which check covers its change; checks only the workstation
+can run go in one queue kept in Reddi Workbench; a result is read before it is reported;
+where there is no hosted CI the check is queued on main after every merge; each repository
+records the test files no gate runs.
 
-[CHECKS.md](CHECKS.md) is this repository's answer to the last three: who builds and who
-reviews here, the one check command, and what each check needs. It is rendered from
+[CHECKS.md](CHECKS.md) is this repository's answer to rules 8 to 10, 14 and 15: who builds and who
+reviews here, the one check command, what each check needs, what happens after a merge,
+and which test files no gate names. It is rendered from
 Reddi Workbench's `planning/repo-facts.json`; correct a wrong fact there.
 
 Unlike the rest of this folder, the review rule is also stated in this repository's own

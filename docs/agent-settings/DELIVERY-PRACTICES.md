@@ -1,9 +1,10 @@
 # Delivery practices
 
-Twelve working rules. Rules 1 to 6 were adopted on 11 November 2026 after one issue was taken
+Fifteen working rules. Rules 1 to 6 were adopted on 11 November 2026 after one issue was taken
 through delivery in each of eleven repositories; rules 7 to 10 after a second round the
-same day; rules 11 and 12, and additions to rules 2, 4 and 10, after a third. Each rule names the evidence behind it. This repository's own instructions (`AGENTS.md` or `CLAUDE.md`)
-are the contract; this page explains how to meet them. Copied from Reddi Workbench (`docs/DELIVERY-PRACTICES.md`, commit `03ece99`).
+same day; rules 11 and 12, and additions to rules 2, 4 and 10, after a third; rules 13 to 15, and
+additions to rules 2 and 4, after a fourth. Each rule names the evidence behind it. This repository's own instructions (`AGENTS.md` or `CLAUDE.md`)
+are the contract; this page explains how to meet them. Copied from Reddi Workbench (`docs/DELIVERY-PRACTICES.md`, commit `6c75c85`).
 
 ## 1. The CI run is the proof that tests pass
 
@@ -32,9 +33,17 @@ Check for an open pull request too. An issue that an open pull request already n
 taken: building it again makes a duplicate. `python3 scripts/triage.py check OWNER/REPO`
 lists every issue named by an open pull request whose readiness line does not say so.
 
+An issue can also wait on a pull request that never mentions it, because the code it
+changes exists only on that pull request's branch. `python3 scripts/triage.py precheck
+OWNER/REPO N ...` reads each shortlisted issue for the files it names and says which are
+not on the default branch but are added by an open pull request. It sees only paths the
+issue writes in backticks, so an issue that describes a file in words still needs a read.
+
 *Evidence: five of the eight issues chosen as "smallest" in two repositories were already
 fixed on main. In the third round an issue was built a second time while its first pull
-request was still open, because the check looked only at the default branch.*
+request was still open, because the check looked only at the default branch. In the fourth,
+three issues chosen for one repository all changed code that existed only on an unmerged
+pull request's branch.*
 
 ## 3. One review rule: the builder reviews its own work
 
@@ -77,8 +86,15 @@ for issues somebody has looked at.
 A round can only "pick a Ready issue" where some are marked `Ready`. Before a round, the
 session shortlists a few candidates per repository and the owner confirms them.
 
+The pre-build checks of rule 2 come before the shortlist reaches the owner, not after: for
+each candidate, the outcome is checked against the default branch and `triage.py precheck`
+is run. Only candidates that pass are offered, and `Ready` is written only after the owner
+confirms. A title is not enough to shortlist on.
+
 *Evidence: four repositories had no issue an agent session could start, and finding that
-out took a read of every open issue.*
+out took a read of every open issue. In the fourth round a shortlist picked from titles was
+confirmed and marked `Ready`; four of its fourteen issues then had to be changed to
+`Blocked` or closed as already met.*
 
 ## 5. Read an issue back before hashing or mirroring it
 
@@ -171,3 +187,38 @@ settings, is a separate request the owner approves.
 
 *Evidence: by the end of the third round seven results were waiting on the workstation,
 asked for in four separate prompts.*
+
+## 13. Read the result before reporting it
+
+A comment, an issue line or a pull request description states only what a command has
+already shown. Run the command, read its output, then write. Do not post in the same step
+as the command whose result the post describes, and do not write the expected result in
+advance. If a posted statement turns out wrong, correct it in a new comment that says so.
+
+*Evidence: in the fourth round a comment said no commit carried a file, posted before the
+search output had been read; the file was on an open pull request's branch. In the third,
+a pull request body said tests passed while one was failing.*
+
+## 14. Without hosted CI, the check runs on main after every merge
+
+Where no hosted CI runs on the default branch, nothing notices when a merge leaves it
+failing. After each merge in such a repository, queue its check command on `main` in the
+workstation queue (rule 12). A failure there is fixed before the next issue is started.
+Each repository's `CHECKS.md` says, under "After a merge", whether this applies.
+
+*Evidence: one repository's quality gate had been failing on main since four documents were
+added without a matching fixture entry. It was found only when an unrelated pull request
+was sent to the workstation, and it blocked that pull request.*
+
+## 15. Know which tests no gate runs
+
+A test file that no workflow, manifest or check command runs is not a check. Each
+repository's `CHECKS.md` records, under "Tests no gate names", the result of
+`python3 scripts/ungated_tests.py PROJECT_DIR`. The script lists candidates for a person
+to read: it cannot see a runner that finds tests by convention. When a change touches
+code whose tests are on that list, the pull request either adds them to a gate or says
+they were run by hand (rule 11).
+
+*Evidence: fifteen tests for a build verifier had been written, reviewed and merged without
+any workflow or local gate running them. The audit that followed found candidates in five
+of eleven repositories.*
