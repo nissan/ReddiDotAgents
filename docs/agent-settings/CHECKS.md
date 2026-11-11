@@ -33,7 +33,7 @@ name the machine that has to run it.
 
 ## After a merge
 
-No hosted CI runs on the default branch. After each merge, queue the check command on `main` in Reddi Workbench's workstation queue (delivery practices, rule 14) and treat a failure there as the next thing to fix.
+No hosted CI runs on the default branch. At the end of each round in which something merged here, queue the check command on `main` once in Reddi Workbench's workstation queue (delivery practices, rule 14) and treat a failure there as the next thing to fix.
 
 ## Tests no gate names
 

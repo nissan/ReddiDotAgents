@@ -3,8 +3,9 @@
 Fifteen working rules. Rules 1 to 6 were adopted on 11 November 2026 after one issue was taken
 through delivery in each of eleven repositories; rules 7 to 10 after a second round the
 same day; rules 11 and 12, and additions to rules 2, 4 and 10, after a third; rules 13 to 15, and
-additions to rules 2 and 4, after a fourth. Each rule names the evidence behind it. This repository's own instructions (`AGENTS.md` or `CLAUDE.md`)
-are the contract; this page explains how to meet them. Copied from Reddi Workbench (`docs/DELIVERY-PRACTICES.md`, commit `6c75c85`).
+additions to rules 2 and 4, after a fourth; the changes to rules 4, 12, 13 and 14 marked
+"round 4 review" after looking back at that round the same day. Each rule names the evidence behind it. This repository's own instructions (`AGENTS.md` or `CLAUDE.md`)
+are the contract; this page explains how to meet them. Copied from Reddi Workbench (`docs/DELIVERY-PRACTICES.md`, commit `a015471`).
 
 ## 1. The CI run is the proof that tests pass
 
@@ -91,10 +92,16 @@ each candidate, the outcome is checked against the default branch and `triage.py
 is run. Only candidates that pass are offered, and `Ready` is written only after the owner
 confirms. A title is not enough to shortlist on.
 
+A round takes the most valuable issues that pass those checks, wherever they are. It does
+not take one from each repository: that leaves `Ready` issues waiting in busy repositories
+while quiet ones get make-work. Issues the owner marked `Ready` in an earlier round and
+nobody built come first (round 4 review).
+
 *Evidence: four repositories had no issue an agent session could start, and finding that
 out took a read of every open issue. In the fourth round a shortlist picked from titles was
 confirmed and marked `Ready`; four of its fourteen issues then had to be changed to
-`Blocked` or closed as already met.*
+`Blocked` or closed as already met. One issue per repository meant five of eleven
+repositories got real work and nine confirmed `Ready` issues were left unbuilt.*
 
 ## 5. Read an issue back before hashing or mirroring it
 
@@ -182,11 +189,19 @@ When a pull request or issue stops on a check a cloud session cannot run, add th
 `planning/workstation-queue.json` in Reddi Workbench: the repository, the ref, the command,
 what to record and what it unblocks. `python3 scripts/workstation.py prompt` turns the
 whole queue into one task for the workstation agent. Remove an item when its result is
-recorded. The queue holds checks only; anything that changes the machine, such as applying
+recorded.
+
+An item is sent once (round 4 review). `python3 scripts/workstation.py send LABEL` marks
+the unsent items as batch LABEL and prints the prompt to hand over; commit the queue with
+it. A later prompt holds only items added since. The session reads results from the
+evidence branch itself, so the only reply the owner needs to pass on is "done, batch
+LABEL". `done ID ...` removes the items whose result has been read. The queue holds checks only; anything that changes the machine, such as applying
 settings, is a separate request the owner approves.
 
 *Evidence: by the end of the third round seven results were waiting on the workstation,
-asked for in four separate prompts.*
+asked for in four separate prompts. In the fourth round three prompts in an hour overlapped:
+two items ran twice (one of them a nine-minute gate), and the owner relayed by hand results
+the session had already read.*
 
 ## 13. Read the result before reporting it
 
@@ -195,20 +210,32 @@ already shown. Run the command, read its output, then write. Do not post in the 
 as the command whose result the post describes, and do not write the expected result in
 advance. If a posted statement turns out wrong, correct it in a new comment that says so.
 
+For a pull request's check results, do not type them (round 4 review).
+`python3 scripts/evidence.py run DIR LABEL -- COMMAND` runs one command and records its
+output, exit code and commit; `python3 scripts/evidence.py block DIR` prints the section to
+paste, built only from those records. A check with no record cannot appear in it.
+
 *Evidence: in the fourth round a comment said no commit carried a file, posted before the
 search output had been read; the file was on an open pull request's branch. In the third,
-a pull request body said tests passed while one was failing.*
+a pull request body said tests passed while one was failing. While this rule was being
+rolled out, a pull request gave a file count of 1421 that the command had printed as 1420.*
 
-## 14. Without hosted CI, the check runs on main after every merge
+## 14. Without hosted CI, the check runs on main at the end of each round
 
 Where no hosted CI runs on the default branch, nothing notices when a merge leaves it
-failing. After each merge in such a repository, queue its check command on `main` in the
-workstation queue (rule 12). A failure there is fixed before the next issue is started.
-Each repository's `CHECKS.md` says, under "After a merge", whether this applies.
+failing. At the end of a round, each such repository that had a merge gets its check
+command queued on `main` once in the workstation queue (rule 12). A failure there is fixed
+before the next round starts. Each repository's `CHECKS.md` says, under "After a merge",
+whether this applies and where the check can run.
+
+This was first written as "after every merge" and changed the same day (round 4 review):
+each result allowed another merge, which queued another run.
 
 *Evidence: one repository's quality gate had been failing on main since four documents were
 added without a matching fixture entry. It was found only when an unrelated pull request
-was sent to the workstation, and it blocked that pull request.*
+was sent to the workstation, and it blocked that pull request. Run per merge, the rule
+produced three workstation prompts in an hour. Its first use also showed that one
+repository's check could not run on the workstation at all.*
 
 ## 15. Know which tests no gate runs
 
@@ -222,3 +249,14 @@ they were run by hand (rule 11).
 *Evidence: fifteen tests for a build verifier had been written, reviewed and merged without
 any workflow or local gate running them. The audit that followed found candidates in five
 of eleven repositories.*
+
+## Keeping the copies in step
+
+Ten repositories carry a copy of this page and a rendered `CHECKS.md`.
+`python3 scripts/rollout.py status NAME=DIR ...` says which clones are behind;
+`python3 scripts/rollout.py refresh NAME DIR` rewrites the copy, the `CHECKS.md` and the
+README's pointer in one clone and prints the steps that repository needs before its pull
+request. The README no longer lists the rules, so it does not change when one does.
+
+*Evidence: one change to these rules took about fifteen pull requests across eleven
+repositories, each refreshed by hand, and two copies were already a version behind.*
