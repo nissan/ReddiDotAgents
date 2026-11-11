@@ -93,7 +93,7 @@ The fleet rules reach omp when a fresh session's instructions include the "Fleet
 Changes to the kit are made here, then pulled by every machine.
 
 1. Edit the kit files: `omp/settings.json`, `omp/extensions/`, `pi/settings.json`, `shared/fleet-rules.md`, `firstmate/crew-dispatch.json`, `firstmate/crew-dispatch.cursor.json`, `npm-globals.txt`, or `scripts/sync.sh`.
-2. Test the script against throwaway directories, never the user's real ones:
+2. Run `scripts/check.sh` and paste its output in the pull request: this repository has no hosted CI, so that output is the evidence. It validates the settings and dispatch files, then runs the sync round trip below against throwaway directories. Without omp the round trip is reported as NOT RUN (exit 3), which is a stop, not a pass. The round trip by hand, never against the user's real directories:
    ```sh
    S=$(mktemp -d); mkdir -p "$S/omp" "$S/pi"
    PI_CODING_AGENT_DIR="$S/omp" REDDIDOTAGENTS_PI_DIR="$S/pi" REDDIDOTAGENTS_BACKUP_DIR="$S/bak" \
@@ -127,6 +127,9 @@ Changes to the kit are made here, then pulled by every machine.
   it is not already met on the default branch. The other
   [delivery practices](docs/agent-settings/DELIVERY-PRACTICES.md) (readiness line,
   read-back before hashing, draft scenarios) apply too.
+- **Checks and roles.** [docs/agent-settings/CHECKS.md](docs/agent-settings/CHECKS.md) says who
+  builds and who reviews here, the one check command and what each check needs.
+  A coding agent session builds; the builder reviews its own work. There is no hosted CI: paste the output of `scripts/check.sh` before merge.
 - Apart from the two rules above, everything else in this file and this repository wins
   over that folder.
 

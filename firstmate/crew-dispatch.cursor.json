@@ -7,7 +7,7 @@
         { "harness": "omp", "model": "@cheap_grok", "provider": "cursor" }
       ],
       "select": "quota-balanced",
-      "why": "Cheapest Cursor-subscription tier: Composer 2.5 or Grok Code Fast 1."
+      "why": "Cheapest Cursor-subscription tier: Composer 2.5 or Grok 4.5 Fast."
     },
     {
       "when": "Task-intake analysis determines a clear, scoped fix or change of moderate size: the path and the acceptance evidence are both already clear.",
@@ -16,7 +16,7 @@
         { "harness": "omp", "model": "@mid_grok", "provider": "cursor" }
       ],
       "select": "quota-balanced",
-      "why": "Mid Cursor-subscription tier: Claude Sonnet 5 (medium) or Grok 4.6."
+      "why": "Mid Cursor-subscription tier: Claude Sonnet 5.5 or Grok 4.6."
     },
     {
       "when": "Task-intake analysis determines high complexity, uncertainty, or blast radius in a bounded task: cross-cutting design, security, concurrency, release-critical changes, or a review the owner asked for.",
@@ -33,7 +33,7 @@
         { "harness": "omp", "model": "@frontier_cursor", "provider": "cursor" }
       ],
       "select": "quota-balanced",
-      "why": "Frontier through Cursor: Claude Fable 5.1 at high effort. Cursor lists no Fable 5.2 or GPT-6 Astra."
+      "why": "Frontier through Cursor: Claude Fable 5.2 at high effort. Cursor lists no GPT-6 Astra."
     }
   ],
   "default": [

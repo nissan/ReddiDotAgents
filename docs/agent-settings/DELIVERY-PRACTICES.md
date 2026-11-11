@@ -1,8 +1,9 @@
 # Delivery practices
 
-Six working rules adopted on 11 November 2026, after one issue was taken through delivery
-in each of eleven repositories. Each rule names the evidence behind it. This repository's own instructions (`AGENTS.md` or `CLAUDE.md`)
-are the contract; this page explains how to meet them. Copied from Reddi Workbench (`docs/DELIVERY-PRACTICES.md`, commit `469a6f1`).
+Ten working rules. Rules 1 to 6 were adopted on 11 November 2026 after one issue was taken
+through delivery in each of eleven repositories; rules 7 to 10 after a second round the
+same day. Each rule names the evidence behind it. This repository's own instructions (`AGENTS.md` or `CLAUDE.md`)
+are the contract; this page explains how to meet them. Copied from Reddi Workbench (`docs/DELIVERY-PRACTICES.md`, commit `2659ea8`).
 
 ## 1. The CI run is the proof that tests pass
 
@@ -60,6 +61,11 @@ The Status section of an issue carries one readiness line:
 
 Example: `Readiness: Needs tool (shared-brain recall).`
 
+`python3 scripts/triage.py check OWNER/REPO` in Reddi Workbench lists the open issues with no
+readiness line. `apply` writes `Draft` into each of them, or the line a decisions file
+gives, and leaves an issue that already has a line alone. `Draft` is the honest default:
+a script cannot know that a person has read the scenarios.
+
 *Evidence: four repositories had no issue an agent session could start, and finding that
 out took a read of every open issue.*
 
@@ -80,3 +86,50 @@ reversible change, and says in the pull request that the scenarios were unreview
 
 *Evidence: about 180 issues were given two or three scenarios each from a short excerpt in
 one pass.*
+
+## 7. A review follow-up goes on the pull request, or is filed as blocked on it
+
+When a review of an open pull request finds something to fix, fix it on that pull request's
+branch. If it is filed as a separate issue instead, the issue's readiness line is
+`Blocked (pull request N)` from the start, and it cannot be picked up until that pull
+request merges.
+
+*Evidence: in the second round four "smallest ready" issues in two repositories could not
+be built, because the code they asked to change existed only on an unmerged branch.*
+
+## 8. Each repository says what its checks need
+
+`CHECKS.md` (in `docs/agent-settings/`, or `docs/` in Reddi Workbench) lists each check,
+its command, what it needs and whether it runs in a cloud agent session with no machine
+linked. Read it before choosing an issue: a session that cannot run an issue's check
+cannot finish that issue. When a check cannot run where you are, say so in the pull
+request and name the machine that has to run it.
+
+The facts live in Reddi Workbench (`planning/repo-facts.json`) and are rendered by
+`scripts/repo_facts.py`. When a session finds a fact is wrong, it corrects it there.
+
+*Evidence: in four repositories the deciding check could not run in the cloud session
+(native modules, a missing task tool, simulators, an image tool), and each time that was
+found out only after the work was done.*
+
+## 9. A repository without hosted CI has one check command
+
+Where no hosted CI runs on pull requests, the repository names one command that runs
+everything a builder can run locally. Its full output, with the commit it ran on, is
+pasted into the pull request before merge. If part of it could not run, the command says
+so and exits non-zero, and the pull request stays unmerged until a machine that can run
+it has.
+
+*Evidence: four repositories have no routine hosted CI; in each, "tests pass" in a pull
+request was whatever the builder chose to run.*
+
+## 10. The agent file says who builds and who reviews
+
+Each repository's agent instructions carry one line naming who builds there and who
+reviews, with the detail in `CHECKS.md`. One issue built to completion per round is not
+the measure in a repository where the session only reviews, or where the next step is an
+owner decision: there the session's work is the review or the prepared decision.
+
+*Evidence: one repository is built by Codex with Claude reviewing only, and another's
+ready work was a visual audit awaiting the owner; treating both as "build one issue" gave
+nothing to build.*

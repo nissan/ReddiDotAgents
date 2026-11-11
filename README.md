@@ -22,12 +22,12 @@ The `mid` tier is for a clear, scoped fix and `cheap` for side jobs (search, log
 
 | Tier | Cursor | Grok through Cursor |
 |---|---|---|
-| `cheap` | Composer 2.5 | Grok Code Fast 1 |
-| `mid` | Claude Sonnet 5 (medium) | Grok 4.6 |
+| `cheap` | Composer 2.5 | Grok 4.5 Fast |
+| `mid` | Claude Sonnet 5.5 | Grok 4.6 |
 | `high` | Claude Opus 5.5 | Grok 4.7 |
-| `frontier` | Claude Fable 5.1 (high) | none |
+| `frontier` | Claude Fable 5.2 (high) | none |
 
-These roles are named explicitly (`@high_cursor`, `@mid_grok`, ...); the quota balancer does not rotate into them. For Firstmate, `scripts/sync.sh --dispatch cursor` installs [`firstmate/crew-dispatch.cursor.json`](firstmate/crew-dispatch.cursor.json) into a home whose primary runs in Cursor or Grok. The model ids come from omp's bundled catalogue and have not been checked against a logged-in Cursor account; run `omp login cursor` and confirm them with omp's model list before relying on them.
+These roles are named explicitly (`@high_cursor`, `@mid_grok`, ...); the quota balancer does not rotate into them. For Firstmate, `scripts/sync.sh --dispatch cursor` installs [`firstmate/crew-dispatch.cursor.json`](firstmate/crew-dispatch.cursor.json) into a home whose primary runs in Cursor or Grok. On 11 November 2026 every id was found in `omp models --json` on a machine logged in to Cursor. That shows the catalogue lists them; no request was sent through any of them.
 
 **Quota-aware balancing.** [`omp/extensions/provider-balancer.ts`](omp/extensions/provider-balancer.ts) picks a provider for every subagent spawn. It reads `omp usage --json` and favours the subscription furthest below its expected pace in its current quota window, interleaving spawns by weighted round-robin. The remaining providers become the child's automatic fallbacks.
 
