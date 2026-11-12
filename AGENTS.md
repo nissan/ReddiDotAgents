@@ -50,6 +50,14 @@ scripts/sync.sh --check     # must print "In sync."
 
 Useful options: `--with-firstmate` explicitly opts into legacy maintenance; `--firstmate-home DIR` opts in and selects the home; `--skip-firstmate` disables it. `--dispatch cursor` selects an opted-in legacy profile. Use `--skip-pi` when Pi is unused, `--skip-npm` / `--skip-herdr` for a bounded profile change. Backups go under `~/.reddidotagents-backups/<timestamp>/`; report the actual path. Never apply to a live profile on source-only authority.
 
+For practice-only adoption on an existing qualified OMP host, use
+`scripts/sync.sh --check --rules-only --skip-pi`, then the same flags with
+`--apply` only after permission for that exact instruction diff. This does not
+manage settings, extensions, npm/herdr or Firstmate. Malformed instruction blocks
+and missing prerequisites are stops, not a successful partial installation.
+Personal coordination directives remain outside the managed block: review their
+exact changes separately and preserve the user's cross-harness mirror rule.
+
 ### 4. Provider logins (user action)
 
 Tell the user which of these to run, in a terminal you are not driving, for each subscription they have:

@@ -1,7 +1,7 @@
 # Workbench operating practice (ReddiDotAgents adapter)
 
 Generated from nissan/reddi-workbench planning/operating-model.json.
-Policy SHA-256: 0912615388ee80a86b17a02d2069092cc9de1dbb323714401f66d23b9c0bb3ee. Do not edit this generated copy.
+Policy SHA-256: 16b978aa013839040538ce897f2e19718df0159df3188e891bf784062c0315a0. Do not edit this generated copy.
 
 ## Ownership and evidence
 
@@ -14,6 +14,8 @@ Policy SHA-256: 0912615388ee80a86b17a02d2069092cc9de1dbb323714401f66d23b9c0bb3ee
 ## Native execution and Firstmate transition
 
 - Use the current host native task/delegation facilities where permitted. Firstmate is optional continuity infrastructure, not a prerequisite for new work; do not bypass an installed guard or install unmerged Workbench runtime code.
+- Before side effects, establish and verify a real durable session or checkpoint using the host's supported initialization. Verify recovery before advertising it; an allocated session path is not persistence. Reconcile operation IDs and external receipts before retrying interrupted actions.
+- Launch new native project work from a standalone workspace outside legacy supervisor instruction roots. Preserve existing checkouts and history with separate worktrees; do not disable inherited guards or context discovery to hide a conflicting supervisor policy.
 - Drain existing Firstmate work owner by owner at supported safe checkpoints. A handoff identifies the exact heads, approvals, budgets, custody and replacement owner before any legacy writer is retired. No forced reset, process kill, scheduler change, uninstall or deletion follows from policy adoption.
 - Host support progresses through planned, installed and exercised evidence. Linux OMP is first; Claude/Codex, then the existing Mac/OpenClaw owner, then other opted-in hosts. An instruction pointer or model catalogue entry is not runtime qualification.
 

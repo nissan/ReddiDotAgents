@@ -23,6 +23,7 @@ Usage: scripts/sync.sh [--check | --apply] [options]
 
   --check                 Report drift only (default). Exit 1 on drift.
   --apply                 Apply the kit, backing up every changed file first.
+  --rules-only            Manage instruction blocks only; no settings/extensions/tools.
   --with-firstmate        Opt in to legacy Firstmate dispatch (disabled by default).
   --skip-firstmate        Do not inspect or manage any Firstmate home.
   --firstmate-home DIR    Opt in and select a Firstmate home.
@@ -43,12 +44,13 @@ EOF
 
 MODE=check
 FM_HOME=${FIRSTMATE_HOME:-$HOME/firstmate}
-DO_NPM=1 DO_HERDR=1 DO_PI=1 DO_FIRSTMATE=0 UPGRADE_NPM=0
+DO_NPM=1 DO_HERDR=1 DO_PI=1 DO_FIRSTMATE=0 UPGRADE_NPM=0 RULES_ONLY=0
 DISPATCH=default
 while [ $# -gt 0 ]; do
   case "$1" in
   --check) MODE=check ;;
   --apply) MODE=apply ;;
+  --rules-only) RULES_ONLY=1 ;;
   --with-firstmate) DO_FIRSTMATE=1 ;;
   --skip-firstmate) DO_FIRSTMATE=0 ;;
   --firstmate-home) FM_HOME=${2:?--firstmate-home needs a directory}; DO_FIRSTMATE=1; shift ;;
@@ -62,6 +64,13 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+if [ "$RULES_ONLY" = 1 ]; then
+  if [ "$DO_FIRSTMATE" = 1 ] || [ "$UPGRADE_NPM" = 1 ]; then
+    echo "--rules-only cannot change Firstmate dispatch or upgrade tools." >&2
+    exit 2
+  fi
+  DO_NPM=0 DO_HERDR=0
+fi
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 case "$DISPATCH" in
@@ -99,8 +108,34 @@ sync_file() { # <src> <dest> <label>
   wrote "$2"
 }
 
+valid_instruction_block() {
+  BEGIN="$BLOCK_BEGIN" END="$BLOCK_END" awk '
+    index($0, ENVIRON["BEGIN"]) {
+      if ($0 != ENVIRON["BEGIN"] || open || begins || ends) bad = 1
+      begins++; open = 1
+    }
+    index($0, ENVIRON["END"]) {
+      if ($0 != ENVIRON["END"] || !open || ends) bad = 1
+      ends++; open = 0
+    }
+    END { exit (bad || open || begins != ends || begins > 1) }'
+}
+
+check_instruction_file() {
+  if [ -L "$1" ] || { [ -e "$1" ] && [ ! -f "$1" ]; }; then
+    echo "Refusing non-regular instruction target: $1" >&2
+    return 1
+  fi
+  if [ -f "$1" ] && ! valid_instruction_block <"$1"; then
+    echo "Malformed managed instruction block; refusing to overwrite $1" >&2
+    return 1
+  fi
+  return 0
+}
+
 managed_block() { # <src-md> <dest-md> <label>: replace or append the marked block, keep the rest
-  local current='' next
+  local current='' next tmp
+  check_instruction_file "$2" || return 1
   [ -f "$2" ] && current=$(cat "$2")
   if printf '%s' "$current" | grep -qF "$BLOCK_BEGIN"; then
     next=$(BEGIN="$BLOCK_BEGIN" END="$BLOCK_END" BODY="$(cat "$1")" awk '
@@ -117,7 +152,12 @@ managed_block() { # <src-md> <dest-md> <label>: replace or append the marked blo
   [ "$MODE" = apply ] || return 0
   backup "$2"
   mkdir -p "$(dirname "$2")"
-  printf '%s\n' "$next" >"$2"
+  tmp=$(mktemp "$2.tmp.XXXXXX")
+  if [ -f "$2" ] && ! cp -p "$2" "$tmp"; then rm -f "$tmp"; return 1; fi
+  if ! printf '%s\n' "$next" >"$tmp" || ! mv -f "$tmp" "$2"; then
+    rm -f "$tmp"
+    return 1
+  fi
   wrote "$2"
 }
 
@@ -126,6 +166,11 @@ sync_omp() {
   if ! have omp; then missing "omp is not on PATH (see README prerequisites)"; return 0; fi
   local dir key want cur merged arg backed=0
   dir=$(omp config path)
+  check_instruction_file "$dir/AGENTS.md" || return 1
+  if [ "$RULES_ONLY" = 1 ]; then
+    managed_block "$ROOT/shared/fleet-rules.md" "$dir/AGENTS.md" "fleet rules in AGENTS.md"
+    return 0
+  fi
   for key in $(jq -r 'keys[]' "$ROOT/omp/settings.json"); do
     want=$(jq -c --arg k "$key" '.[$k]' "$ROOT/omp/settings.json")
     cur=$(omp config get "$key" --json 2>/dev/null | jq -c '.value' 2>/dev/null) || cur=null
@@ -149,6 +194,11 @@ sync_pi() {
   [ "$DO_PI" = 1 ] || { ok "skipped (--skip-pi)"; return 0; }
   local dir=${REDDIDOTAGENTS_PI_DIR:-$HOME/.pi/agent} file cur merged
   if ! have pi && [ ! -d "$dir" ]; then ok "pi not installed; skipped"; return 0; fi
+  check_instruction_file "$dir/AGENTS.md" || return 1
+  if [ "$RULES_ONLY" = 1 ]; then
+    managed_block "$ROOT/shared/fleet-rules.md" "$dir/AGENTS.md" "fleet rules in AGENTS.md"
+    return 0
+  fi
   file="$dir/settings.json"
   cur='{}'
   [ -f "$file" ] && cur=$(jq -c . "$file")
@@ -262,8 +312,11 @@ sync_herdr
 printf '\n'
 if [ "$MODE" = apply ]; then
   [ -d "$BACKUP_DIR" ] && printf 'Backups of changed files: %s\n' "$BACKUP_DIR"
-  printf 'Applied. Run scripts/sync.sh --check to confirm.\n'
-  [ "$MISSING" = 0 ] || printf 'Some prerequisites are missing; see MISSING lines above.\n'
+  if [ "$MISSING" != 0 ]; then
+    printf 'Incomplete: prerequisites are missing; see MISSING lines above.\n'
+    exit 1
+  fi
+  printf 'Applied. Run scripts/sync.sh --check with the same scope to confirm.\n'
   exit 0
 fi
 if [ "$DRIFT" = 0 ] && [ "$MISSING" = 0 ]; then

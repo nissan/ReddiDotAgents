@@ -88,6 +88,16 @@ Start your agent in this directory and ask it to preview the pinned kit. Apply o
    scripts/sync.sh --check   # shows drift, changes nothing
    scripts/sync.sh --apply   # applies, backing up every changed file
    ```
+
+   For **practice-only adoption on an existing OMP host**, preview and explicitly
+   authorize only its instruction block:
+   ```sh
+   scripts/sync.sh --check --rules-only --skip-pi
+   scripts/sync.sh --apply --rules-only --skip-pi
+   ```
+   `--rules-only` never manages settings, extensions, tools or legacy dispatch;
+   it rejects conflicting legacy/tool-upgrade options. Other hosts require their
+   own qualification. Personal coordination text needs a separate reviewed edit.
 3. Log in to each subscription you have. You type the credentials; nothing in this repository stores them:
    ```sh
    omp login anthropic
@@ -114,6 +124,7 @@ scripts/sync.sh --apply --upgrade-npm   # also update the npm tools to @latest
 - **omp** (`~/.omp/agent/config.yml`): only the keys in [`omp/settings.json`](omp/settings.json) are managed. Record values such as `modelRoles` are merged key by key, so your own roles survive and the kit's roles win. omp rewrites the file when settings change, so YAML comments are not preserved; the pre-change file is kept in the backup.
 - **Pi** (`~/.pi/agent/settings.json`): deep-merged with [`pi/settings.json`](pi/settings.json). Other keys stay.
 - **Instructions** (`AGENTS.md` in each harness's agent directory): the fleet rules live between `reddidotagents:begin` and `reddidotagents:end` markers. Text outside the markers is yours and is never changed.
+- **Safe instruction writes**: malformed, duplicate, reversed or non-regular instruction targets are refused. Updates retain backups and use an atomic replacement. Missing prerequisites make `--apply` fail; partial setup is not a successful rollout.
 - **Whole files**: `provider-balancer.ts`; Firstmate's `config/crew-dispatch.json` only on explicit opt-in (`--with-firstmate`, optionally `--dispatch cursor`).
 - **Backups**: every changed file is copied to `~/.reddidotagents-backups/<timestamp>/` first.
 - **Never touched**: logins, tokens, auth stores, sessions, and anything else in the agent directories.

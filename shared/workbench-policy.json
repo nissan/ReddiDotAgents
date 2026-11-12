@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "source": {
     "repository": "nissan/reddi-workbench",
-    "commit": "aac85a757268698e795e421d8b401c3720c49a50",
-    "policySha256": "0912615388ee80a86b17a02d2069092cc9de1dbb323714401f66d23b9c0bb3ee",
+    "commit": "5efdff12405ce24d9ab00e67f40c08e3a2e0ea3c",
+    "policySha256": "16b978aa013839040538ce897f2e19718df0159df3188e891bf784062c0315a0",
     "status": "committed"
   },
   "contract": {
@@ -146,6 +146,8 @@
       ],
       "Native execution and Firstmate transition": [
         "Use the current host native task/delegation facilities where permitted. Firstmate is optional continuity infrastructure, not a prerequisite for new work; do not bypass an installed guard or install unmerged Workbench runtime code.",
+        "Before side effects, establish and verify a real durable session or checkpoint using the host's supported initialization. Verify recovery before advertising it; an allocated session path is not persistence. Reconcile operation IDs and external receipts before retrying interrupted actions.",
+        "Launch new native project work from a standalone workspace outside legacy supervisor instruction roots. Preserve existing checkouts and history with separate worktrees; do not disable inherited guards or context discovery to hide a conflicting supervisor policy.",
         "Drain existing Firstmate work owner by owner at supported safe checkpoints. A handoff identifies the exact heads, approvals, budgets, custody and replacement owner before any legacy writer is retired. No forced reset, process kill, scheduler change, uninstall or deletion follows from policy adoption.",
         "Host support progresses through planned, installed and exercised evidence. Linux OMP is first; Claude/Codex, then the existing Mac/OpenClaw owner, then other opted-in hosts. An instruction pointer or model catalogue entry is not runtime qualification."
       ],
@@ -169,6 +171,6 @@
     }
   },
   "files": {
-    "shared/fleet-rules.md": "91022c9e030f429b1e58c8969ef3ddee155b07a4b61c8b819f0b1ccd1bc8efa9"
+    "shared/fleet-rules.md": "34885100b818fd7689b57f6011a36ddb52631980ac4371adb5f45f137a181c37"
   }
 }
