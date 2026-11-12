@@ -23,7 +23,9 @@ Usage: scripts/sync.sh [--check | --apply] [options]
 
   --check                 Report drift only (default). Exit 1 on drift.
   --apply                 Apply the kit, backing up every changed file first.
-  --firstmate-home DIR    Firstmate home (default: $FIRSTMATE_HOME or ~/firstmate).
+  --with-firstmate        Opt in to legacy Firstmate dispatch (disabled by default).
+  --skip-firstmate        Do not inspect or manage any Firstmate home.
+  --firstmate-home DIR    Opt in and select a Firstmate home.
   --dispatch NAME         Crew dispatch profile: "default" (Claude, ChatGPT, Antigravity)
                           or "cursor" (Cursor subscription, including Grok through
                           Cursor) for a home whose primary runs in Cursor or Grok.
@@ -41,13 +43,15 @@ EOF
 
 MODE=check
 FM_HOME=${FIRSTMATE_HOME:-$HOME/firstmate}
-DO_NPM=1 DO_HERDR=1 DO_PI=1 UPGRADE_NPM=0
+DO_NPM=1 DO_HERDR=1 DO_PI=1 DO_FIRSTMATE=0 UPGRADE_NPM=0
 DISPATCH=default
 while [ $# -gt 0 ]; do
   case "$1" in
   --check) MODE=check ;;
   --apply) MODE=apply ;;
-  --firstmate-home) FM_HOME=${2:?--firstmate-home needs a directory}; shift ;;
+  --with-firstmate) DO_FIRSTMATE=1 ;;
+  --skip-firstmate) DO_FIRSTMATE=0 ;;
+  --firstmate-home) FM_HOME=${2:?--firstmate-home needs a directory}; DO_FIRSTMATE=1; shift ;;
   --dispatch) DISPATCH=${2:?--dispatch needs a profile name}; shift ;;
   --upgrade-npm) UPGRADE_NPM=1 ;;
   --skip-npm) DO_NPM=0 ;;
@@ -165,6 +169,7 @@ sync_pi() {
 
 sync_firstmate() {
   section "firstmate"
+  [ "$DO_FIRSTMATE" = 1 ] || { ok "disabled; native OMP does not require Firstmate"; return 0; }
   if [ ! -d "$FM_HOME/.git" ] && [ ! -f "$FM_HOME/.git" ]; then
     ok "no Firstmate home at $FM_HOME; skipped (see README to set one up)"
     return 0
@@ -216,7 +221,37 @@ sync_herdr() {
   done
 }
 
+check_policy_artifacts() {
+  local manifest="$ROOT/shared/workbench-policy.json" expected actual
+  if ! jq -e '
+    .schemaVersion == 1 and .source.repository == "nissan/reddi-workbench" and
+    (.source.commit | test("^[a-f0-9]{40}$")) and
+    (.source.policySha256 | test("^[a-f0-9]{64}$")) and
+    (.source.status == "committed" or .source.status == "local-proposal") and
+    .contract.execution.firstmateRequired == false and
+    .contract.execution.delegation == "host-native" and
+    .contract.freshness.autoApply == false
+  ' "$manifest" >/dev/null; then
+    echo "Invalid Workbench policy manifest; refresh from its pinned source." >&2
+    return 1
+  fi
+  expected=$(jq -er '.files["shared/fleet-rules.md"] | select(test("^[a-f0-9]{64}$"))' "$manifest") || return 1
+  if have sha256sum; then
+    actual=$(sha256sum "$ROOT/shared/fleet-rules.md") || return 1
+  elif have shasum; then
+    actual=$(shasum -a 256 "$ROOT/shared/fleet-rules.md") || return 1
+  else
+    echo "sha256sum or shasum is required to verify policy artifacts." >&2
+    return 1
+  fi
+  [ "${actual%% *}" = "$expected" ] || {
+    echo "Workbench policy adapter drift; refusing to sync changed artifacts." >&2
+    return 1
+  }
+}
+
 if ! have jq; then echo "jq is required (install it, then rerun)" >&2; exit 2; fi
+check_policy_artifacts || exit 2
 printf 'ReddiDotAgents %s (%s)\n' "$MODE" "$ROOT"
 sync_omp
 sync_pi

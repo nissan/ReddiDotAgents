@@ -51,13 +51,31 @@ fi
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
 mkdir -p "$S/omp" "$S/pi"
-run() { PI_CODING_AGENT_DIR="$S/omp" REDDIDOTAGENTS_PI_DIR="$S/pi" REDDIDOTAGENTS_BACKUP_DIR="$S/bak" \
-  scripts/sync.sh "$@" --skip-npm --skip-herdr --firstmate-home "$S/none"; }
+mkdir -p "$S/firstmate/.git" "$S/firstmate/config"
+printf 'existing owner retains this dispatch\n' >"$S/firstmate/config/crew-dispatch.json"
+cp "$S/firstmate/config/crew-dispatch.json" "$S/legacy-before"
+run() { FIRSTMATE_HOME="$S/firstmate" PI_CODING_AGENT_DIR="$S/omp" REDDIDOTAGENTS_PI_DIR="$S/pi" REDDIDOTAGENTS_BACKUP_DIR="$S/bak" \
+  scripts/sync.sh "$@" --skip-npm --skip-herdr; }
 if run --apply >"$S/apply.log" 2>&1; then ok "apply into empty directories"; else bad "apply failed"; tail -20 "$S/apply.log"; fi
 if run --check >"$S/check.log" 2>&1 && grep -q 'In sync\.' "$S/check.log"; then
   ok "second check prints In sync."
 else
   bad "second check did not print In sync."; tail -20 "$S/check.log"
+fi
+if cmp -s "$S/legacy-before" "$S/firstmate/config/crew-dispatch.json"; then
+  ok "native default leaves existing Firstmate work untouched"
+else
+  bad "native default changed legacy Firstmate dispatch"
+fi
+if run --check --with-firstmate >"$S/legacy.log" 2>&1; then
+  bad "explicit legacy check accepted unsupported Firstmate"
+else
+  status=$?
+  if [ "$status" = 1 ]; then
+    ok "explicit legacy check refuses unsupported Firstmate"
+  else
+    bad "legacy check failed unexpectedly (exit $status)"
+  fi
 fi
 [ "$fail" = 0 ] || { echo "Sync round trip failed."; exit 1; }
 echo "All checks passed."

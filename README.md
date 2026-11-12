@@ -1,9 +1,15 @@
 # ReddiDotAgents
 
-A portable, refreshable setup for running a multi-provider coding-agent fleet:
-[Oh My Pi](https://github.com/can1357/oh-my-pi) (`omp`) as the agent harness, [Firstmate](https://github.com/nissan/firstmate) supervising fleets of agents in [herdr](https://github.com/herdrdev/herdr) panes, and work spread across Claude, ChatGPT, and Google Antigravity subscriptions by quota and task complexity.
+A portable, refreshable distribution kit for Workbench-led development practice.
+[Oh My Pi](https://github.com/can1357/oh-my-pi) (`omp`) runs standalone using native
+delegation. Existing Firstmate work is an explicitly opted-in legacy path, not a
+requirement or the policy authority.
 
-This repository holds only configuration and a sync script. The tools themselves come from their own repositories (linked below). Clone it on every machine, point your coding agent at [`AGENTS.md`](AGENTS.md), and rerun the sync whenever this repository updates.
+The canonical common practice is
+[`nissan/reddi-workbench/planning/operating-model.json`](https://github.com/nissan/reddi-workbench/blob/main/planning/operating-model.json).
+This kit carries generated rules and a source commit/digest manifest in
+`shared/workbench-policy.json`. Review a pinned update; do not auto-apply drift.
+Project security and explicit owner permissions remain authoritative.
 
 ## What you get
 
@@ -27,7 +33,7 @@ The `mid` tier is for a clear, scoped fix and `cheap` for side jobs (search, log
 | `high` | Claude Opus 5.5 | Grok 4.7 |
 | `frontier` | Claude Fable 5.2 (high) | none |
 
-These roles are named explicitly (`@high_cursor`, `@mid_grok`, ...); the quota balancer does not rotate into them. For Firstmate, `scripts/sync.sh --dispatch cursor` installs [`firstmate/crew-dispatch.cursor.json`](firstmate/crew-dispatch.cursor.json) into a home whose primary runs in Cursor or Grok. On 11 November 2026 every id was found in `omp models --json` on a machine logged in to Cursor. That shows the catalogue lists them; no request was sent through any of them.
+These roles are named explicitly (`@high_cursor`, `@mid_grok`, ...); the quota balancer does not rotate into them. For an explicitly opted-in legacy home, `scripts/sync.sh --with-firstmate --dispatch cursor` selects [`firstmate/crew-dispatch.cursor.json`](firstmate/crew-dispatch.cursor.json). On 11 November 2026 every id was found in `omp models --json` on a machine logged in to Cursor. That proves catalogue discovery only; no request was sent through them.
 
 **Quota-aware balancing.** [`omp/extensions/provider-balancer.ts`](omp/extensions/provider-balancer.ts) picks a provider for every subagent spawn. It reads `omp usage --json` and favours the subscription furthest below its expected pace in its current quota window, interleaving spawns by weighted round-robin. The remaining providers become the child's automatic fallbacks.
 
@@ -35,15 +41,15 @@ These roles are named explicitly (`@high_cursor`, `@mid_grok`, ...); the quota b
 
 **Session defaults.** A plain `omp` session runs GPT-6.1 Sol with `auto` effort and falls back to Claude Opus 5.5 if OpenAI is unavailable.
 
-**Fleet rules.** [`shared/fleet-rules.md`](shared/fleet-rules.md) is installed into the global instructions of both omp and Pi. It sets a five-active-agents-per-provider-family cap, tier selection by kind of work, stall redirection, local-first CI, and builder self-review before merge.
+**Common practice.** [`shared/fleet-rules.md`](shared/fleet-rules.md) is generated from Workbench and installed into the marked instruction blocks of omp and Pi. Its cap, recovery, authority and review rules are guidance; copying them does not establish runtime enforcement.
 
-**Firstmate crew dispatch.** [`firstmate/crew-dispatch.json`](firstmate/crew-dispatch.json) routes Firstmate crew tasks to the same omp tiers, ranked by Firstmate's own quota snapshot. Unmatched work goes to the high tier at medium effort.
+**Optional Firstmate dispatch.** [`firstmate/crew-dispatch.json`](firstmate/crew-dispatch.json) supports already-owned legacy work. Default sync never inspects a Firstmate home. Use `--with-firstmate` or `--firstmate-home DIR` only with explicit permission; `--skip-firstmate` disables that path.
 
-**Firstmate harness changes.** The [nissan/firstmate](https://github.com/nissan/firstmate) fork carries the harness support this kit relies on:
+**Legacy harness prerequisites.** The [nissan/firstmate](https://github.com/nissan/firstmate) fork carries:
 - [#52](https://github.com/nissan/firstmate/pull/52): an omp primary's built-in delegation (the `task` tool and eval `agent()`/`workpool()`) is refused in favour of fleet dispatch. Firstmate accepts omp model roles and `auto` effort for omp crew, keeps `auto` through relaunch, and refuses it for other harnesses.
 - [#53](https://github.com/nissan/firstmate/pull/53): reconciles newer upstream Firstmate.
 
-The crew dispatch profile needs a Firstmate home that includes #52. `scripts/sync.sh` refuses to install it into an older checkout or into upstream Firstmate, because their validators reject `auto` effort.
+Only the opted-in crew dispatch path needs #52. It refuses unsupported homes. Do not bypass its guard, move custody or retire an active run while adopting native execution.
 
 **Tooling.** The script installs the herdr integrations for omp and Pi, so their sessions appear in herdr's sidebar and resume after a restart. It also installs the npm CLI tools Firstmate expects (the `*-axi` tools and the Railway CLI).
 
@@ -68,7 +74,7 @@ git clone https://github.com/nissan/ReddiDotAgents.git ~/ReddiDotAgents
 cd ~/ReddiDotAgents
 ```
 
-Start your agent (`omp`, `claude`, `codex`, …) in that directory and ask it to **"set up this machine from AGENTS.md"**. It installs the prerequisites, shows you what will change, applies the kit, and walks you through the provider logins, which you complete yourself.
+Start your agent in this directory and ask it to preview the pinned kit. Apply only the exact target and settings you authorize. Native OMP needs no Firstmate setup; provider logins and new providers require separate permission.
 
 ### By hand
 
@@ -89,7 +95,7 @@ Start your agent (`omp`, `claude`, `codex`, …) in that directory and ask it to
    omp login google-antigravity
    omp usage accounts        # confirm
    ```
-4. Optional, for Firstmate: clone [nissan/firstmate](https://github.com/nissan/firstmate) to `~/firstmate`, follow its README, then rerun `scripts/sync.sh --apply` to install the crew dispatch profile. An existing Firstmate home must be updated to include [#52](https://github.com/nissan/firstmate/pull/52) first.
+4. Optional legacy maintenance only: after an owner checkpoint and explicit permission, an existing Firstmate home including [#52](https://github.com/nissan/firstmate/pull/52) may use `scripts/sync.sh --with-firstmate --apply`. Do not create a new Firstmate dependency for baseline adoption.
 
 ## Updating
 
@@ -101,24 +107,24 @@ scripts/sync.sh --apply
 scripts/sync.sh --apply --upgrade-npm   # also update the npm tools to @latest
 ```
 
-`--check` exits 1 when the machine differs from the kit, so you can run it from a scheduled job or a shell startup.
+`--check` reports drift without applying it. Run it at session start, handoff and tranche boundary; do not add an auto-apply daemon. Sync refuses a generated rules file whose digest differs from its manifest. Hashes detect integrity drift; they are not signatures or permission to apply.
 
 ## How the sync treats your own settings
 
 - **omp** (`~/.omp/agent/config.yml`): only the keys in [`omp/settings.json`](omp/settings.json) are managed. Record values such as `modelRoles` are merged key by key, so your own roles survive and the kit's roles win. omp rewrites the file when settings change, so YAML comments are not preserved; the pre-change file is kept in the backup.
 - **Pi** (`~/.pi/agent/settings.json`): deep-merged with [`pi/settings.json`](pi/settings.json). Other keys stay.
 - **Instructions** (`AGENTS.md` in each harness's agent directory): the fleet rules live between `reddidotagents:begin` and `reddidotagents:end` markers. Text outside the markers is yours and is never changed.
-- **Whole files**: `provider-balancer.ts` and Firstmate's `config/crew-dispatch.json` (from `crew-dispatch.json`, or `crew-dispatch.cursor.json` with `--dispatch cursor`).
+- **Whole files**: `provider-balancer.ts`; Firstmate's `config/crew-dispatch.json` only on explicit opt-in (`--with-firstmate`, optionally `--dispatch cursor`).
 - **Backups**: every changed file is copied to `~/.reddidotagents-backups/<timestamp>/` first.
 - **Never touched**: logins, tokens, auth stores, sessions, and anything else in the agent directories.
 
 ## Customising
 
-A refresh reverts edits to managed keys. To customise durably, fork this repository and edit the kit:
+Managed settings remain kit-owned. Common practice is Workbench-owned: edit its canonical contract, review it, then run `python3 scripts/operating_model.py export --kit /explicit/ReddiDotAgents` from that source checkout. The manifest distinguishes committed source from a local proposal.
 
 - **Fewer subscriptions:** remove that family's roles from the tier lists in `omp/settings.json` and from `firstmate/crew-dispatch.json`, and remove its lane in `LANES` in `provider-balancer.ts`. Without those edits, a provider you are not logged in to gets zero weight and is used only as a last-resort fallback.
 - **Different models:** edit the role values in `omp/settings.json`. Firstmate dispatch names roles, so it follows automatically.
-- **Concurrency cap or rules:** edit `shared/fleet-rules.md`.
+- **Concurrency cap or common rules:** change Workbench's `planning/operating-model.json` and regenerate; never hand-edit `shared/fleet-rules.md`.
 
 Personal, machine-specific rules belong outside the managed block in your local `AGENTS.md`.
 
@@ -126,9 +132,10 @@ Personal, machine-specific rules belong outside the managed block in your local 
 
 | Platform | Status |
 |---|---|
-| Linux | Tested |
-| macOS | Expected to work (bash, jq); not yet verified |
-| Windows | Prerequisites via mise in PowerShell; run the sync from Git Bash or WSL; not yet verified |
+| Linux OMP | Disposable sync/RPC qualification first; artifact alignment is not model-behavior proof |
+| Linux Claude/Codex | Next qualification wave; not established by OMP evidence |
+| Mac/OpenClaw | Following wave; not yet qualified |
+| Pi, Gemini, Cursor/Grok, other hosts | Opt-in qualification required; copied files alone do not qualify them |
 
 ## Repository layout
 
@@ -136,6 +143,7 @@ Personal, machine-specific rules belong outside the managed block in your local 
 AGENTS.md                         setup and refresh procedure for coding agents
 CLAUDE.md                         points Claude Code at AGENTS.md
 shared/fleet-rules.md             global fleet rules (managed block in each harness's AGENTS.md)
+shared/workbench-policy.json      pinned Workbench source, contract and generated-file digest
 omp/settings.json                 managed omp config keys (roles, tiers, effort, fallbacks)
 omp/extensions/provider-balancer.ts  quota-aware provider choice for subagent spawns
 pi/settings.json                  managed Pi defaults

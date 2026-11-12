@@ -1,6 +1,6 @@
 # AGENTS.md: setting up or refreshing a machine with ReddiDotAgents
 
-You are a coding agent in a clone of ReddiDotAgents. The user wants this machine set up, or refreshed, so its omp, Pi, herdr, and Firstmate configuration matches this repository. [README.md](README.md) explains what the kit contains and why. This file is the procedure.
+This kit distributes pinned Workbench development practice. Preview the explicitly requested target; source-only or sandbox authority never implies live setup. OMP runs standalone. Firstmate is an optional legacy path, disabled by default. [README.md](README.md) describes the source contract and qualification limits.
 
 ## Hard rules
 
@@ -8,7 +8,7 @@ You are a coding agent in a clone of ReddiDotAgents. The user wants this machine
 - **Preview before applying.** Run `scripts/sync.sh --check` and show the user the drift. Apply only once the user has asked you to, either in their request or after seeing the drift.
 - **Change only what the kit manages.** `scripts/sync.sh` merges managed keys and replaces only the marked `reddidotagents` block in each `AGENTS.md`. Do not hand-edit the user's agent configuration beyond that. If the user wants something different, change this repository (see Maintaining).
 - **Do not commit machine state here.** This repository is public. Nothing from `~/.omp`, `~/.pi`, `~/firstmate/config`, or any home directory goes into it except deliberate, sanitized kit changes.
-- **Leave running work alone.** If a Firstmate primary or fleet is running on this machine, do not stop, restart, or reconfigure it beyond what `scripts/sync.sh` writes. Firstmate config changes take effect on its next spawn.
+- **Leave running work alone.** Do not stop, restart, move custody or reconfigure active runs. Existing Firstmate tasks drain through their current owner at a durable checkpoint; source or sandbox adoption is not retirement authority.
 
 ## Procedure
 
@@ -48,7 +48,7 @@ scripts/sync.sh --apply
 scripts/sync.sh --check     # must print "In sync."
 ```
 
-Useful options: `--firstmate-home DIR` when Firstmate is not at `~/firstmate`, `--dispatch cursor` for a Firstmate home whose primary runs in Cursor or Grok, `--skip-pi` when Pi is not used, `--upgrade-npm` to refresh the npm tools to `@latest`, and `--skip-npm` / `--skip-herdr`. Every changed file is backed up under `~/.reddidotagents-backups/<timestamp>/`; report that path to the user.
+Useful options: `--with-firstmate` explicitly opts into legacy maintenance; `--firstmate-home DIR` opts in and selects the home; `--skip-firstmate` disables it. `--dispatch cursor` selects an opted-in legacy profile. Use `--skip-pi` when Pi is unused, `--skip-npm` / `--skip-herdr` for a bounded profile change. Backups go under `~/.reddidotagents-backups/<timestamp>/`; report the actual path. Never apply to a live profile on source-only authority.
 
 ### 4. Provider logins (user action)
 
@@ -64,9 +64,9 @@ Then verify with `omp usage accounts`. A provider the user does not subscribe to
 
 ### 5. Firstmate (only if the user wants it)
 
-- If `~/firstmate` does not exist, clone https://github.com/nissan/firstmate there, follow its README and CONTRIBUTING for bootstrap and `no-mistakes` setup, then rerun `scripts/sync.sh --apply` to install `config/crew-dispatch.json`.
+- Do not create a new Firstmate dependency for baseline adoption. For an explicitly authorized existing home, use `scripts/sync.sh --with-firstmate --apply` only after its owner confirms a safe checkpoint.
 - The crew dispatch profile uses omp model roles with `auto` effort, which only a Firstmate home including nissan/firstmate PR #52 accepts. If the sync reports that the home predates it, update that home through its own procedure (normally `git pull` on `main`). Do not force the file in: an invalid dispatch file makes Firstmate ignore every dispatch rule.
-- Start the primary with plain `omp` inside the Firstmate home, in a herdr pane.
+- New standalone OMP work uses host-native delegation where permitted, outside an active Firstmate-owned run. Do not bypass an installed guard.
 - Never hand-copy files into an existing Firstmate home's `config/` beyond what the sync writes.
 
 ### 6. Verify
@@ -75,12 +75,12 @@ Run these and report the results:
 
 ```sh
 omp config get modelRoles                  # tier roles present
-omp -p --no-tools "Reply OK"               # default model answers
+# A provider-backed prompt is optional and needs explicit provider/spend permission.
 herdr integration status                   # omp (and pi) current, if herdr is installed
 scripts/sync.sh --check                    # In sync.
 ```
 
-The fleet rules reach omp when a fresh session's instructions include the "Fleet operating rules (ReddiDotAgents)" section from `~/.omp/agent/AGENTS.md`.
+Verify the fresh session's instruction block against `shared/workbench-policy.json` using Workbench's read-only `operating_model.py receipt`. Artifact alignment is not evidence of model obedience, provider enforcement or cross-session capacity control. Qualify each host separately.
 
 ## Troubleshooting
 
@@ -90,14 +90,16 @@ The fleet rules reach omp when a fresh session's instructions include the "Fleet
 
 ## Maintaining this repository
 
-Changes to the kit are made here, then pulled by every machine.
+Common practice is edited in Workbench's `planning/operating-model.json`, reviewed
+and exported into this kit with `scripts/operating_model.py export --kit PATH`.
+Keep its source commit/digest manifest; do not hand-edit generated fleet rules.
 
-1. Edit the kit files: `omp/settings.json`, `omp/extensions/`, `pi/settings.json`, `shared/fleet-rules.md`, `firstmate/crew-dispatch.json`, `firstmate/crew-dispatch.cursor.json`, `npm-globals.txt`, or `scripts/sync.sh`.
+1. Edit kit-owned adapters/settings here: `omp/settings.json`, `omp/extensions/`, `pi/settings.json`, optional legacy dispatch, `npm-globals.txt`, or `scripts/sync.sh`. Review the exact profile diff before any live application.
 2. Run `scripts/check.sh` and paste its output in the pull request: this repository has no hosted CI, so that output is the evidence. It validates the settings and dispatch files, then runs the sync round trip below against throwaway directories. Without omp the round trip is reported as NOT RUN (exit 3), which is a stop, not a pass. The round trip by hand, never against the user's real directories:
    ```sh
    S=$(mktemp -d); mkdir -p "$S/omp" "$S/pi"
    PI_CODING_AGENT_DIR="$S/omp" REDDIDOTAGENTS_PI_DIR="$S/pi" REDDIDOTAGENTS_BACKUP_DIR="$S/bak" \
-     scripts/sync.sh --apply --skip-npm --skip-herdr --firstmate-home "$S/none"
+     scripts/sync.sh --apply --skip-npm --skip-herdr --skip-firstmate
    ```
    A second `--check` against the same directories must print `In sync.`
 3. Scan for secrets and personal data before every commit:
