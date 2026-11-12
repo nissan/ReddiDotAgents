@@ -32,7 +32,7 @@ mise use -g node@lts jq gh herdr github:can1357/oh-my-pi pi
 
 - `pi` is optional; leave it out if the user only uses omp.
 - If herdr cannot be installed through mise on this platform, use its own installer from https://github.com/herdrdev/herdr.
-- `jq` must be real jq. Some systems ship `jaq` as `jq`, which breaks parts of Firstmate's dispatch resolver; check `jq --version`.
+- `jq` must be real jq. Some systems ship `jaq` as `jq`, which breaks parts of Firstmate's dispatch resolver; check `env jq --version` (using `env` so an agent harness's built-in `jq` does not mask the binary on `PATH`).
 
 ### 3. Preview and apply
 
@@ -41,7 +41,7 @@ git pull --ff-only          # on a refresh
 scripts/sync.sh --check
 ```
 
-Summarise the DRIFT and MISSING lines for the user, then:
+Summarise the DRIFT and MISSING lines for the user. If the check lists a "machine-local entries" section, `--apply` will stop without changing anything until the user decides, per the README section "Machine-local additions", whether to declare those entries in `local.json` or create that file containing only `{}` so the kit drops them. Then:
 
 ```sh
 scripts/sync.sh --apply
@@ -95,11 +95,9 @@ Changes to the kit are made here, then pulled by every machine.
 1. Edit the kit files: `omp/settings.json`, `omp/extensions/`, `pi/settings.json`, `shared/fleet-rules.md`, `firstmate/crew-dispatch.json`, `firstmate/crew-dispatch.cursor.json`, `npm-globals.txt`, or `scripts/sync.sh`.
 2. Run `scripts/check.sh` and paste its output in the pull request: this repository has no hosted CI, so that output is the evidence. It validates the settings and dispatch files, then runs the sync round trip below against throwaway directories. Without omp the round trip is reported as NOT RUN (exit 3), which is a stop, not a pass. The round trip by hand, never against the user's real directories:
    ```sh
-   S=$(mktemp -d); mkdir -p "$S/omp" "$S/pi"
-   PI_CODING_AGENT_DIR="$S/omp" REDDIDOTAGENTS_PI_DIR="$S/pi" REDDIDOTAGENTS_BACKUP_DIR="$S/bak" \
-     scripts/sync.sh --apply --skip-npm --skip-herdr --firstmate-home "$S/none"
+   scripts/test-sync.sh
    ```
-   A second `--check` against the same directories must print `In sync.`
+   It must end with `0 failed`. It runs the sync with a stand-in `omp` and a stub Firstmate home, covering fresh installs, `local.json` additions, kit removals, idempotence, and the migration stop.
 3. Scan for secrets and personal data before every commit:
    ```sh
    mise exec gitleaks@latest -- gitleaks git --redact .

@@ -105,10 +105,11 @@ scripts/sync.sh --apply --upgrade-npm   # also update the npm tools to @latest
 
 ## How the sync treats your own settings
 
-- **omp** (`~/.omp/agent/config.yml`): only the keys in [`omp/settings.json`](omp/settings.json) are managed. Record values such as `modelRoles` are merged key by key, so your own roles survive and the kit's roles win. omp rewrites the file when settings change, so YAML comments are not preserved; the pre-change file is kept in the backup.
-- **Pi** (`~/.pi/agent/settings.json`): deep-merged with [`pi/settings.json`](pi/settings.json). Other keys stay.
+- **omp** (`~/.omp/agent/config.yml`): only the keys in [`omp/settings.json`](omp/settings.json) are managed. Record values such as `modelRoles` are merged key by key: the kit's keys win and your own keys survive. The `cheap`, `mid`, `high`, and `frontier` tier lists are owned outright: they become the kit's entries followed by the ones declared in `local.json` (see [Machine-local additions](#machine-local-additions)), so a lane the kit retires disappears on the next refresh. omp rewrites the file when settings change, so YAML comments are not preserved; the pre-change file is kept in the backup.
+- **Pi** (`~/.pi/agent/settings.json`): deep-merged with [`pi/settings.json`](pi/settings.json); the kit's keys win and other keys stay.
 - **Instructions** (`AGENTS.md` in each harness's agent directory): the fleet rules live between `reddidotagents:begin` and `reddidotagents:end` markers. Text outside the markers is yours and is never changed.
-- **Whole files**: `provider-balancer.ts` and Firstmate's `config/crew-dispatch.json` (from `crew-dispatch.json`, or `crew-dispatch.cursor.json` with `--dispatch cursor`).
+- **Firstmate** (`<firstmate-home>/config/crew-dispatch.json`): written as [`firstmate/crew-dispatch.json`](firstmate/crew-dispatch.json) (or `crew-dispatch.cursor.json` with `--dispatch cursor`) plus the lanes and rules declared in `local.json`. Each kit rule carries a `tier` name (`cheap`, `mid`, `high`, `frontier`); local lanes for that tier are appended to its `use` exactly as declared, local rules are appended whole after the kit's rules, and local `default` lanes follow the kit's. The kit's `when`, `select`, `why`, and effort always win on its own rules and lanes. Other files in `config/` (such as `secondmate-harness`) are untouched.
+- **Whole files**: `provider-balancer.ts`.
 - **Backups**: every changed file is copied to `~/.reddidotagents-backups/<timestamp>/` first.
 - **Never touched**: logins, tokens, auth stores, sessions, and anything else in the agent directories.
 
@@ -119,8 +120,40 @@ A refresh reverts edits to managed keys. To customise durably, fork this reposit
 - **Fewer subscriptions:** remove that family's roles from the tier lists in `omp/settings.json` and from `firstmate/crew-dispatch.json`, and remove its lane in `LANES` in `provider-balancer.ts`. Without those edits, a provider you are not logged in to gets zero weight and is used only as a last-resort fallback.
 - **Different models:** edit the role values in `omp/settings.json`. Firstmate dispatch names roles, so it follows automatically.
 - **Concurrency cap or rules:** edit `shared/fleet-rules.md`.
+- **Extra lanes or rules on one machine only:** declare them in `local.json` (next section) instead of editing the kit; a refresh keeps them alongside the kit's entries.
 
 Personal, machine-specific rules belong outside the managed block in your local `AGENTS.md`.
+
+## Machine-local additions
+
+Lanes, roles, or dispatch rules that belong to one machine (a local model, an extra subscription) go in `local.json` at the root of your clone. It is git-ignored, never leaves the machine, and is optional. Its shape mirrors the kit files:
+
+```json
+{
+  "omp": {
+    "modelRoles": {
+      "cheap_local": "local/small-coder",
+      "cheap": "@cheap_local",
+      "mid": "@cheap_local"
+    }
+  },
+  "firstmate": {
+    "use": {
+      "cheap": [ { "harness": "omp", "model": "@cheap_local", "provider": "local" } ]
+    },
+    "rules": [
+      { "when": "Docs-only edits", "use": [ { "harness": "omp", "model": "@cheap_gpt", "provider": "codex" } ], "select": "quota-balanced", "why": "Cheapest GPT lane is enough for prose." }
+    ],
+    "default": [ { "harness": "omp", "model": "@cheap_local", "provider": "local" } ]
+  }
+}
+```
+
+- `omp.modelRoles` is the only `omp` key accepted. It adds role definitions, and the kit's own keys win. Its `cheap`, `mid`, `high`, and `frontier` values are comma-separated strings appended to the kit's tier lists rather than replacing them.
+- `firstmate.use.<tier>` appends lanes to the kit rule with that `tier`; `firstmate.rules` appends whole rules; `firstmate.default` appends default lanes. No other `firstmate` keys are accepted. Local lanes keep whatever `effort` you give them (or none); the kit's lanes carry `auto`. An `omp` lane must name its `provider`, since Firstmate's resolver cannot infer one for omp. The sync checks the shapes it composes: `harness` and `model` non-empty, `effort` non-empty and, for omp lanes only, one of omp's levels, `provider` format, `select`, and repeated profiles; Firstmate validates everything else, including other harnesses' effort levels, `floor`, `approval`, and `min_confidence`, at its next spawn. A local lane that repeats a kit lane's harness, model, and effort is written once, since Firstmate rejects a rule with duplicate profiles.
+- The kit stays canonical: removing a lane or rewording a `why` in the kit reaches every machine, and anything in the managed lists that is neither in the kit nor in `local.json` is replaced on `--apply` (the previous file is backed up).
+
+**Migration.** Until a machine has a `local.json`, a tier list that contains entries the kit does not define, or a `config/crew-dispatch.json` that differs in any way from the selected kit dispatch file (`firstmate/crew-dispatch.json`, or `crew-dispatch.cursor.json` with `--dispatch cursor`), stops the whole run: `--check` reports it under `MISSING` and `--apply` exits before changing anything on the machine, including the fleet rules, extension, Pi, npm, and herdr surfaces. Declare the lanes and rules you want to keep in `local.json`, or create the file containing only `{}` to accept the kit's lists and dispatch file, then rerun. `scripts/test-sync.sh` exercises these rules against throwaway directories.
 
 ## Platform support
 
@@ -143,6 +176,8 @@ firstmate/crew-dispatch.json      Firstmate crew dispatch profiles using omp rol
 firstmate/crew-dispatch.cursor.json  the same, for a home whose primary runs in Cursor or Grok
 npm-globals.txt                   npm CLI tools to install globally
 scripts/sync.sh                   check / apply the kit on this machine
+scripts/test-sync.sh              behavioural tests for the sync, in throwaway directories
+local.json                        optional, git-ignored machine-local additions (see above)
 ```
 
 ## License
