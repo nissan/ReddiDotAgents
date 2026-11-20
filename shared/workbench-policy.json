@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "source": {
     "repository": "nissan/reddi-workbench",
-    "commit": "5efdff12405ce24d9ab00e67f40c08e3a2e0ea3c",
+    "commit": "bde16583409837d36a6413d837d297ec3f5cdf92",
     "policySha256": "16b978aa013839040538ce897f2e19718df0159df3188e891bf784062c0315a0",
     "status": "committed"
   },
