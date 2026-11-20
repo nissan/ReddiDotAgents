@@ -51,13 +51,91 @@ fi
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
 mkdir -p "$S/omp" "$S/pi"
-run() { PI_CODING_AGENT_DIR="$S/omp" REDDIDOTAGENTS_PI_DIR="$S/pi" REDDIDOTAGENTS_BACKUP_DIR="$S/bak" \
-  scripts/sync.sh "$@" --skip-npm --skip-herdr --firstmate-home "$S/none"; }
+mkdir -p "$S/firstmate/.git" "$S/firstmate/config"
+printf 'existing owner retains this dispatch\n' >"$S/firstmate/config/crew-dispatch.json"
+cp "$S/firstmate/config/crew-dispatch.json" "$S/legacy-before"
+run() { FIRSTMATE_HOME="$S/firstmate" PI_CODING_AGENT_DIR="$S/omp" REDDIDOTAGENTS_PI_DIR="$S/pi" REDDIDOTAGENTS_BACKUP_DIR="$S/bak" \
+  scripts/sync.sh "$@" --skip-npm --skip-herdr; }
 if run --apply >"$S/apply.log" 2>&1; then ok "apply into empty directories"; else bad "apply failed"; tail -20 "$S/apply.log"; fi
 if run --check >"$S/check.log" 2>&1 && grep -q 'In sync\.' "$S/check.log"; then
   ok "second check prints In sync."
 else
   bad "second check did not print In sync."; tail -20 "$S/check.log"
+fi
+if cmp -s "$S/legacy-before" "$S/firstmate/config/crew-dispatch.json"; then
+  ok "native default leaves existing Firstmate work untouched"
+else
+  bad "native default changed legacy Firstmate dispatch"
+fi
+if run --check --with-firstmate >"$S/legacy.log" 2>&1; then
+  bad "explicit legacy check accepted unsupported Firstmate"
+else
+  status=$?
+  if [ "$status" = 1 ]; then
+    ok "explicit legacy check refuses unsupported Firstmate"
+  else
+    bad "legacy check failed unexpectedly (exit $status)"
+  fi
+fi
+if run --apply --with-firstmate >"$S/legacy-apply.log" 2>&1; then
+  bad "apply reported success with a missing legacy prerequisite"
+else
+  [ "$?" = 1 ] && ok "incomplete apply returns failure" || bad "unexpected incomplete-apply exit"
+fi
+
+# A practice-only refresh must not repair or overwrite unrelated runtime settings.
+IFS= read -r begin <"$S/omp/AGENTS.md"
+end=$(awk 'END { print }' "$S/omp/AGENTS.md")
+PI_CODING_AGENT_DIR="$S/omp" omp config set defaultThinkingLevel high >/dev/null || bad "cannot seed user runtime setting"
+printf '\n// User-owned canary extension change.\n' >>"$S/omp/extensions/provider-balancer.ts"
+printf 'unparsed user-owned Pi settings\n' >"$S/pi/settings.json"
+printf 'Personal prefix survives.\nPersonal suffix survives.\n' >"$S/omp/AGENTS.md"
+cp "$S/omp/config.yml" "$S/config-before"
+cp "$S/omp/extensions/provider-balancer.ts" "$S/extension-before"
+cp "$S/pi/settings.json" "$S/pi-before"
+if run --apply --rules-only >"$S/rules-apply.log" 2>&1 &&
+   run --check --rules-only >"$S/rules-check.log" 2>&1 &&
+   cmp -s "$S/config-before" "$S/omp/config.yml" &&
+   cmp -s "$S/extension-before" "$S/omp/extensions/provider-balancer.ts" &&
+   cmp -s "$S/pi-before" "$S/pi/settings.json" &&
+   grep -qxF 'Personal prefix survives.' "$S/omp/AGENTS.md" &&
+   grep -qxF 'Personal suffix survives.' "$S/omp/AGENTS.md"; then
+  ok "rules-only refresh preserves settings, extensions and personal instructions"
+else
+  bad "rules-only refresh exceeded its scope"
+fi
+for malformed in missing-end duplicate reversed; do
+  case "$malformed" in
+  missing-end) printf 'Personal prefix\n%s\nold policy\nPersonal suffix\n' "$begin" ;;
+  duplicate) printf '%s\n%s\n%s\n%s\nPersonal suffix\n' "$begin" "$end" "$begin" "$end" ;;
+  reversed) printf '%s\nPersonal text\n%s\n' "$end" "$begin" ;;
+  esac >"$S/omp/AGENTS.md"
+  cp "$S/omp/AGENTS.md" "$S/instructions-before"
+  if run --apply >"$S/malformed.log" 2>&1; then
+    bad "$malformed block was accepted"
+  elif cmp -s "$S/instructions-before" "$S/omp/AGENTS.md" &&
+       cmp -s "$S/config-before" "$S/omp/config.yml" &&
+       cmp -s "$S/extension-before" "$S/omp/extensions/provider-balancer.ts"; then
+    ok "$malformed block is refused before runtime or instruction writes"
+  else
+    bad "$malformed refusal changed user files"
+  fi
+done
+if run --apply --rules-only --with-firstmate >"$S/conflicting-scope.log" 2>&1; then
+  bad "rules-only accepted a legacy write scope"
+else
+  [ "$?" = 2 ] && ok "conflicting write scopes are refused" || bad "unexpected scope-refusal exit"
+fi
+printf 'User-owned external instruction content.\n' >"$S/external-owner-file"
+cp "$S/external-owner-file" "$S/external-before"
+rm -f "$S/omp/AGENTS.md"
+ln -s "$S/external-owner-file" "$S/omp/AGENTS.md"
+if run --apply --rules-only >"$S/symlink.log" 2>&1; then
+  bad "rules-only followed an instruction symlink"
+elif [ -L "$S/omp/AGENTS.md" ] && cmp -s "$S/external-before" "$S/external-owner-file"; then
+  ok "instruction symlinks are refused without following or replacing them"
+else
+  bad "symlink refusal changed user files"
 fi
 [ "$fail" = 0 ] || { echo "Sync round trip failed."; exit 1; }
 echo "All checks passed."
